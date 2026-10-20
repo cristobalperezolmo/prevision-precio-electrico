@@ -1,14 +1,20 @@
 """
-v0: calcula la previsión benchmark de un día de entrega y la envía a Forecast Score.
+Calcula la previsión de un día de entrega y la envía a Forecast Score.
+
+Modelos:
+    v1 (por defecto): LightGBM con precios, meteorología y gas -> cris-es-da-v1
+    v0: réplica del benchmark de la plataforma           -> cris-es-da-v0
 
 Uso:
-    python enviar_prevision.py                    # próximo día de entrega abierto
+    python enviar_prevision.py                    # v1, próximo día de entrega abierto
+    python enviar_prevision.py --version v0       # benchmark
     python enviar_prevision.py --fecha 2026-10-25 # un día concreto
     python enviar_prevision.py --dry-run          # calcula y valida, pero no envía
 
-Respaldo: si no se pueden descargar los precios del día de referencia, se prueba con
-otros días ya publicados (ayer, hace una semana...). Mejor enviar algo razonable que nada.
-Si al final no se envía, el script termina con error para que GitHub Actions avise por email.
+Respaldo: si el v1 falla (datos o modelo), se envía el benchmark con el código del v1.
+Si no se pueden descargar los precios del día de referencia, se prueba con otros días ya
+publicados. Mejor enviar algo razonable que nada. Cuando se usa un respaldo, o no se envía,
+el script termina con error para que GitHub Actions avise por email.
 """
 
 import argparse
@@ -22,7 +28,7 @@ from prevision import benchmark, omie, validacion
 from prevision.calendario import cutoff, periodos_utc, proxima_entrega_abierta
 from prevision.forecastscore import Cliente
 
-MODELO_POR_DEFECTO = "cris-es-da-v0"
+CODIGOS = {"v0": "cris-es-da-v0", "v1": "cris-es-da-v1"}
 
 
 def prevision_benchmark(entrega: date):
@@ -43,12 +49,13 @@ def prevision_benchmark(entrega: date):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--fecha", type=date.fromisoformat, help="día de entrega (YYYY-MM-DD)")
-    parser.add_argument("--modelo", default=os.getenv("MODEL_CODE", MODELO_POR_DEFECTO))
+    parser.add_argument("--version", choices=list(CODIGOS), default="v1")
     parser.add_argument("--dry-run", action="store_true", help="no envía nada")
     args = parser.parse_args()
 
     load_dotenv()
     entrega = args.fecha or proxima_entrega_abierta()
+    args.modelo = CODIGOS[args.version]
     print(f"Día de entrega: {entrega} ({len(periodos_utc(entrega))} periodos), "
           f"cutoff {cutoff(entrega):%Y-%m-%d %H:%M %Z}, modelo {args.modelo}")
 
@@ -71,10 +78,23 @@ def main():
         raise SystemExit("Falta FORECASTSCORE_API_KEY (en .env o en los secretos de GitHub)")
 
     # 2. Calcular y validar
-    precios, dia_usado = prevision_benchmark(entrega)
-    precios = validacion.preparar(entrega, precios)
-    oficial = benchmark.dia_referencia(entrega)
-    print(f"Referencia: {dia_usado}" + ("" if dia_usado == oficial else f" (RESPALDO, la oficial era {oficial})"))
+    avisos = []
+    precios = None
+    if args.version == "v1":
+        try:
+            from prevision import modelo
+            precios = validacion.preparar(entrega, modelo.predecir(entrega))
+            print("Previsión del modelo v1 lista")
+        except Exception as e:  # noqa: BLE001 - cualquier fallo: caer al benchmark
+            avisos.append(f"El modelo v1 falló ({type(e).__name__}: {e}); se envía el benchmark")
+            print(f"AVISO: {avisos[-1]}", file=sys.stderr)
+    if precios is None:
+        precios, dia_usado = prevision_benchmark(entrega)
+        precios = validacion.preparar(entrega, precios)
+        oficial = benchmark.dia_referencia(entrega)
+        print(f"Benchmark con referencia {dia_usado}")
+        if dia_usado != oficial:
+            avisos.append(f"Benchmark con día de respaldo {dia_usado} (el oficial era {oficial})")
     print(precios.to_string())
 
     # 3. Enviar
@@ -84,8 +104,8 @@ def main():
     respuesta = cliente.enviar(args.modelo, entrega, precios)
     print(f"Enviado: id={respuesta['id']} versión={respuesta['version']} "
           f"estado={respuesta['status']} a las {respuesta['submitted_at']}")
-    if dia_usado != oficial:
-        raise SystemExit("Enviado con un día de respaldo: revisar por qué falló la referencia oficial")
+    if avisos:
+        raise SystemExit("Enviado, pero con respaldo:\n" + "\n".join(avisos))
 
 
 if __name__ == "__main__":

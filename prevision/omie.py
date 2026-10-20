@@ -17,7 +17,7 @@ import requests
 from prevision.calendario import periodos_utc
 
 URL = ("https://www.omie.es/es/file-download?parents%5B0%5D=marginalpdbc"
-       "&filename=marginalpdbc_{fecha:%Y%m%d}.1")
+       "&filename=marginalpdbc_{fecha:%Y%m%d}.{version}")
 
 
 def leer_fichero(texto: str, entrega: date) -> pd.Series:
@@ -48,13 +48,28 @@ def leer_fichero(texto: str, entrega: date) -> pd.Series:
 
 
 def descargar_dia(entrega: date, reintentos: int = 3) -> pd.Series:
-    """Descarga los precios horarios de España de un día de entrega."""
+    """Descarga los precios horarios de España de un día de entrega.
+
+    Normalmente el fichero es la versión .1; algunos días solo existe una versión
+    corregida (.2, .3...), y entonces OMIE devuelve 404 o una página HTML para la .1.
+    """
     ultimo_error = None
     for _ in range(reintentos):
-        try:
-            r = requests.get(URL.format(fecha=entrega), timeout=30)
-            r.raise_for_status()
-            return leer_fichero(r.text, entrega)
-        except (requests.RequestException, ValueError) as e:
-            ultimo_error = e
+        for version in (1, 2, 3, 4):
+            try:
+                r = requests.get(URL.format(fecha=entrega, version=version), timeout=30)
+                r.raise_for_status()
+                if not r.text.startswith("MARGINALPDBC"):
+                    raise ValueError(f"versión .{version} no disponible")
+                return leer_fichero(r.text, entrega)
+            except requests.HTTPError as e:
+                ultimo_error = e
+                if e.response is not None and e.response.status_code == 404:
+                    continue  # probar la siguiente versión
+                break
+            except (requests.RequestException, ValueError) as e:
+                ultimo_error = e
+                if "no disponible" in str(e):
+                    continue
+                break
     raise RuntimeError(f"No se pudieron descargar los precios de OMIE del {entrega}: {ultimo_error}")

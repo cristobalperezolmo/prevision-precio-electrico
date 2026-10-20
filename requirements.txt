@@ -3,3 +3,8 @@ pandas==3.0.6
 holidays==0.107
 python-dotenv==1.2.4
 pytest==9.1.1
+numpy==2.4.6
+lightgbm==4.7.0
+scikit-learn==1.9.1
+pyarrow==26.0.0
+yfinance==1.7.0

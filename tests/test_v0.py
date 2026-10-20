@@ -81,3 +81,26 @@ def test_validacion():
         validacion.preparar(entrega, buenos.replace(50.123, 5000))
     with pytest.raises(ValueError):
         validacion.preparar(entrega, buenos.replace(50.123, float("nan")))
+
+
+def _datos_sinteticos(desde: date, dias: int) -> dict:
+    """Precios, meteo y gas inventados para probar la construcción de variables sin internet."""
+    from datetime import timedelta
+    import numpy as np
+    from prevision.historico import PUNTOS, VARIABLES
+    horas = pd.date_range(periodos_utc(desde)[0], periodos_utc(desde + timedelta(days=dias))[-1], freq="1h")
+    precios = pd.Series(50 + 30 * np.sin(np.arange(len(horas)) / 24 * 2 * np.pi), index=horas)
+    meteo = pd.DataFrame({f"{v}__{p}": 10.0 for v in VARIABLES for p in PUNTOS}, index=horas)
+    gas = pd.Series(30.0, index=[desde + timedelta(days=i) for i in range(dias + 1)])
+    return {"precios": precios, "meteo": meteo, "gas": gas}
+
+
+def test_variables_dias_de_cambio_de_hora():
+    from prevision.variables import columnas_modelo, construir
+    datos = _datos_sinteticos(date(2026, 9, 20), 40)
+    X = construir([OCTUBRE, date(2026, 10, 22)], datos)
+    assert list(X.groupby("entrega").size()) == [24, 25]
+    assert X.loc[X["entrega"] == OCTUBRE, "hora"].tolist()[2:4] == [2, 2]
+    assert not X[columnas_modelo(X)].isna().all().any()
+    datos = _datos_sinteticos(date(2027, 3, 1), 40)
+    assert len(construir([MARZO], datos)) == 23
