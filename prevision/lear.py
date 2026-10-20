@@ -24,7 +24,8 @@ DIARIAS = ["ttf", "ttf_cambio", "festivo", "r_nuclear", "r_hidraulica", "r_ciclo
            "r_eolica", "r_solar", "r_hidraulica_media7"]
 
 
-def matriz_diaria(X: pd.DataFrame, precios: pd.Series, extra_diarias: dict | None = None):
+def matriz_diaria(X: pd.DataFrame, precios: pd.Series, extra_diarias: dict | None = None,
+                  exogenas: list[str] | None = None, diarias: list[str] | None = None):
     """Devuelve (F, Y): una fila por día de entrega. F = variables, Y = 24 precios del día."""
     P = tabla_diaria(precios)
     P = P.reindex(columns=range(24)).interpolate(axis=1, limit_direction="both")  # 02:00 de marzo
@@ -38,7 +39,7 @@ def matriz_diaria(X: pd.DataFrame, precios: pd.Series, extra_diarias: dict | Non
         lag.columns = [f"p{k}_h{h}" for h in range(24)]
         bloques.append(lag)
 
-    for col in EXOGENAS_HORARIAS:
+    for col in exogenas or EXOGENAS_HORARIAS:
         for sufijo, nombre in (("", "E"), ("_D", "D")):
             c = col + sufijo
             if c in X:
@@ -48,9 +49,9 @@ def matriz_diaria(X: pd.DataFrame, precios: pd.Series, extra_diarias: dict | Non
                 t.columns = [f"{col}_{nombre}_h{h}" for h in range(24)]
                 bloques.append(t)
 
-    diarias = X.groupby("entrega")[[c for c in DIARIAS if c in X]].first().reindex(dias)
-    diarias.index = idx
-    bloques.append(diarias)
+    tabla_diarias = X.groupby("entrega")[[c for c in (diarias or DIARIAS) if c in X]].first().reindex(dias)
+    tabla_diarias.index = idx
+    bloques.append(tabla_diarias)
     for nombre, serie in (extra_diarias or {}).items():
         bloques.append(pd.DataFrame({nombre: serie.reindex(dias).values}, index=idx))
     semana = pd.get_dummies(pd.to_datetime(pd.Series(dias)).dt.weekday, prefix="dow").astype(float)

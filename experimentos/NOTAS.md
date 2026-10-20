@@ -81,3 +81,21 @@ La demanda prevista para E debe publicarse ≤ 2 h antes del cierre de la subast
 - Ronda 9 (sin la demanda prevista para E): 0,559/0,589 → TODA la mejora viene de la demanda prevista para E.
 - ⚠️ PENDIENTE verificar la hora real de publicación y si el valor se revisa después
   (experimentos/vigilar_ec.py, snapshots en data/snapshots/). Hasta verificarlo, no pasar a producción.
+
+## Ronda 7: SEMANAL, tabla ext4 (= juego "sin_ec" de producción)
+- extras 0,549/0,567 · reciente365 0,548/0,558 · hojas63 0,547/0,565 · tramos 0,552/0,571
+- Media de 4: 0,537 / 0,555 · + 15 % LEAR: 0,532 / 0,552 · + corrección: **0,527 / 0,545**
+
+## LEAR ampliado (idx eólico/solar, MIBGAS, demanda ENTSO-E): 0,614 / 0,696 (LEAR: 0,641 / 0,697)
+En la mezcla final no cambia nada (0,511/0,528 vs 0,513/0,528) → se mantiene el LEAR original (no depende de ENTSO-E).
+
+## Ronda 10: SEMANAL, tabla ext5 (= juego "con_ec" de producción)
+- extras 0,530/0,536 · reciente365 0,523/0,531 · hojas63 0,525/0,534 · tramos 0,535/0,545
+- Media de 4: 0,518 / 0,527 · + 15 % LEAR: 0,513 / 0,528 · + corrección: **0,511 / 0,521**
+
+# SISTEMA FINAL (experimentos/final.py)
+Semanal · 4 LightGBM (ext5) + 15 % LEAR · corrección de sesgo (vida media 14 d, k = 0,7)
+- **Total ene-2025 a oct-2026: MAE 11,38 €/MWh (benchmark 22,09) → rMAE 0,515**; todos los meses < 1 (máx. 0,75, may-2025)
+- 2025: 0,511 · 2026: 0,521 (producción actual: 0,563 / 0,600; v1 inicial: 0,598 / 0,639)
+- A 15 minutos (forma media de 7 días): rMAE 0,527 (MAE 12,0 frente a 22,8)
+- Respaldo sin la demanda de ENTSO-E (juego sin_ec): total 0,535 (2025 0,527 / 2026 0,545)
