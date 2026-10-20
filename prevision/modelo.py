@@ -59,7 +59,8 @@ def _cargar(ruta: Path) -> lgb.Booster:
 def construir_variables(dias: list[date], datos: dict) -> pd.DataFrame:
     X = variables.construir(dias, datos)
     X = variables.anadir_extras(X, datos)
-    return variables.anadir_extras2(X, datos)
+    X = variables.anadir_extras2(X, datos)
+    return variables.anadir_puntos(X, datos)
 
 
 def entrenar_y_guardar():

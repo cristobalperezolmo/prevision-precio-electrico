@@ -62,3 +62,8 @@ Corrección: restar k × (media exponencial de los errores pasados a esa misma h
 - Sin balance (intercambios/bombeo): 0,564 / 0,593 → neutro
 - Ventana de 730 días en las otras variantes: hojas63 0,570/0,586 (vs 0,565/0,587), tramos 0,572/0,598 (vs 0,566/0,598),
   reciente365 0,570/0,583 (vs 0,567/0,583) → no aporta: se entrena con todo el histórico
+
+## Ronda 5 (tabla ext4 = ext2 sin CO2 + factor de carga eólico y radiación de cada uno de los 24 puntos)
+- extras 0,561/0,590 · reciente365 0,561/0,586 · hojas63 0,557/0,588 · tramos 0,560/0,593
+- Media de 4: ext2 0,555/0,578 → **ext4 0,548/0,580** · + 15 % LEAR: 0,541/0,573 · + corrección de sesgo: **0,531 / 0,556**
+- Se elige ext4 (mejor en 2025, igual en 2026)

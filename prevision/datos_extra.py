@@ -130,3 +130,32 @@ def actualizar(desde: date = date(2024, 3, 1)):
 
 if __name__ == "__main__":
     actualizar()
+
+
+# --- Energy-Charts (Fraunhofer ISE): previsiones day-ahead oficiales de España (vienen de ENTSO-E) ---
+URL_EC = "https://api.energy-charts.info/public_power_forecast"
+TIPOS_EC = {"solar": "ec_solar", "wind_onshore": "ec_eolica", "load": "ec_demanda"}
+
+
+def descargar_ec(desde: date, hasta: date, pausa: float = 6.0, rapido: bool = False) -> pd.DataFrame:
+    """Previsión day-ahead horaria (MW, media de los cuartos) de solar, eólica y demanda de España."""
+    import time
+    columnas = {}
+    for tipo, nombre in TIPOS_EC.items():
+        trozos, a = [], desde
+        while a <= hasta:
+            b = min(a + timedelta(days=30), hasta)
+            r = _get_con_reintentos(URL_EC, params={"country": "es", "production_type": tipo,
+                                                    "forecast_type": "day-ahead",
+                                                    "start": a.isoformat(), "end": b.isoformat()},
+                                    **({"intentos": 3, "espera": 20, "timeout": 40} if rapido else {}))
+            j = r.json()
+            t = pd.to_datetime(j["unix_seconds"], unit="s", utc=True)
+            trozos.append(pd.Series(j["forecast_values"], index=t, dtype=float))
+            a = b + timedelta(days=1)
+            if not rapido:
+                time.sleep(pausa)
+        s = pd.concat(trozos).sort_index()
+        s = s[~s.index.duplicated(keep="last")]
+        columnas[nombre] = s.resample("1h").mean()
+    return pd.DataFrame(columnas)

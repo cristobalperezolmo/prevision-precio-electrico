@@ -52,6 +52,15 @@ jobs:
         env:
           FORECASTSCORE_API_KEY: ${{ secrets.FORECASTSCORE_API_KEY }}
         run: python enviar_prevision.py --version v1 ${{ inputs.fecha && format('--fecha {0}', inputs.fecha) || '' }}
+      # Previsión a 15 minutos (ranking PT15M). Desactivada salvo que la variable del repositorio
+      # ENVIAR_PT15M valga "true" (Settings → Secrets and variables → Actions → Variables)
+      - name: Enviar v1 a 15 minutos
+        id: v1_15
+        if: vars.ENVIAR_PT15M == 'true'
+        continue-on-error: true
+        env:
+          FORECASTSCORE_API_KEY: ${{ secrets.FORECASTSCORE_API_KEY }}
+        run: python enviar_prevision.py --version v1 --resolucion PT15M ${{ inputs.fecha && format('--fecha {0}', inputs.fecha) || '' }}
       # Guarda la previsión sin corregir en registro/ (la usa la corrección de sesgo de los días siguientes)
       - name: Guardar registro
         if: always()
@@ -67,5 +76,5 @@ jobs:
       # Los tests van después del envío: si fallan, avisan, pero no impiden enviar
       - run: python -m pytest -q
       - name: Marcar el job como fallido si el envío falló o usó el respaldo (para recibir el email)
-        if: steps.v1.outcome == 'failure'
+        if: steps.v1.outcome == 'failure' || steps.v1_15.outcome == 'failure'
         run: exit 1

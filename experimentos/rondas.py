@@ -39,3 +39,9 @@ r5 = {f"e4_{k}": v for k, v in V1.items()}
 
 # Ronda 6 (tabla ext2, sin CO2): las 4 variantes con reentrenamiento SEMANAL
 r6 = {f"sem_{k}": dict(v, frecuencia="W", excluir=("co2",)) for k, v in V1.items()}
+
+# Ronda 7 (tabla ext4): las 4 variantes con reentrenamiento SEMANAL
+r7 = {f"sem4_{k}": dict(v, frecuencia="W") for k, v in V1.items()}
+
+# Ronda 8 (tabla ext5 = ext4 + previsiones ENTSO-E sin fuga: demanda de E, eólica/solar/demanda de D), mensual
+r8 = {f"e5_{k}": v for k, v in V1.items()}

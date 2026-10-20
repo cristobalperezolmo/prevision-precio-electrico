@@ -270,3 +270,28 @@ def anadir_puntos(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
             diaria = tabla[c].groupby(tabla.index.tz_convert(MADRID).date).mean()
             X[f"{c}_E"] = entrega.map(diaria).values
     return X
+
+
+def anadir_ec(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
+    """Previsiones oficiales day-ahead de España (Energy-Charts / ENTSO-E), solo las disponibles a tiempo:
+    - demanda prevista para E (se publica antes de las 10:00 de D, 2 h antes del cierre de la subasta)
+    - eólica, solar y demanda previstas para D (publicadas el día anterior): con qué renovables se formó
+      el precio de D. La eólica/solar prevista para E sale hacia las 18:00 de D: NO se usa (sería fuga)."""
+    if "ec" not in datos:
+        return X
+    X = X.copy()
+    ec = datos["ec"] / 1000  # GW
+    entrega = pd.Series(X["entrega"].values, index=X.index)
+    D = entrega - timedelta(days=1)
+    antes = X.index - pd.Timedelta(days=1)
+    X["ec_demanda_E"] = ec["ec_demanda"].reindex(X.index).values
+    X["ec_demanda_D"] = ec["ec_demanda"].reindex(antes).values
+    X["ec_demanda_dif"] = X["ec_demanda_E"] - X["ec_demanda_D"]
+    X["ec_eolica_D"] = ec["ec_eolica"].reindex(antes).values
+    X["ec_solar_D"] = ec["ec_solar"].reindex(antes).values
+    X["ec_residual_D"] = X["ec_demanda_D"] - X["ec_eolica_D"] - X["ec_solar_D"]
+    diaria = ec.groupby(ec.index.tz_convert(MADRID).date).mean()
+    X["ec_demanda_E_dia"] = entrega.map(diaria["ec_demanda"]).values
+    for col in ("ec_eolica", "ec_solar", "ec_demanda"):
+        X[f"{col}_D_dia"] = D.map(diaria[col]).values
+    return X
