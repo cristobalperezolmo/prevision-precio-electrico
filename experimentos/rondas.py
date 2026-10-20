@@ -56,3 +56,6 @@ r9 = {
 
 # Ronda 10 (ext5): las 4 variantes con reentrenamiento SEMANAL
 r10 = {f"sem5_{k}": dict(v, frecuencia="W") for k, v in V1.items()}
+
+# Ronda 11 (ext5, semanal): 3 semillas por variante
+r11 = {f"sem5s3_{k}": dict(v, frecuencia="W", semillas=(0, 1, 2)) for k, v in V1.items()}
