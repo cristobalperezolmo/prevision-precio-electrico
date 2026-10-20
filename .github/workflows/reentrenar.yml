@@ -37,11 +37,11 @@ jobs:
       - run: python -m pytest -q
       - name: Publicar el modelo en la rama modelos
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -rf /tmp/publicar && mkdir /tmp/publicar && cp -r modelos /tmp/publicar/
           cd /tmp/publicar
           git init -q -b modelos
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add modelos
           git commit -q -m "Modelo v1 entrenado el $(date -u +%Y-%m-%d)"
           git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" modelos
