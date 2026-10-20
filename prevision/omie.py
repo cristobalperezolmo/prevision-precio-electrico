@@ -20,8 +20,9 @@ URL = ("https://www.omie.es/es/file-download?parents%5B0%5D=marginalpdbc"
        "&filename=marginalpdbc_{fecha:%Y%m%d}.{version}")
 
 
-def leer_fichero(texto: str, entrega: date) -> pd.Series:
-    """Convierte el texto de un fichero marginalpdbc en precios horarios indexados en UTC."""
+def leer_fichero(texto: str, entrega: date, horario: bool = True) -> pd.Series:
+    """Convierte el texto de un fichero marginalpdbc en precios indexados en UTC
+    (horarios si horario=True; si no, en la resolución original del fichero)."""
     precios = {}
     for linea in texto.splitlines():
         partes = linea.strip().split(";")
@@ -43,11 +44,13 @@ def leer_fichero(texto: str, entrega: date) -> pd.Series:
 
     inicios = periodos_utc(entrega, minutos)
     serie = pd.Series([precios[p] for p in range(1, n + 1)], index=inicios)
+    if not horario:
+        return serie
     # Las horas de Madrid son horas enteras en UTC, así que agrupar por hora UTC es correcto
     return serie.resample("1h").mean()
 
 
-def descargar_dia(entrega: date, reintentos: int = 3) -> pd.Series:
+def descargar_dia(entrega: date, reintentos: int = 3, horario: bool = True) -> pd.Series:
     """Descarga los precios horarios de España de un día de entrega.
 
     Normalmente el fichero es la versión .1; algunos días solo existe una versión
@@ -61,7 +64,7 @@ def descargar_dia(entrega: date, reintentos: int = 3) -> pd.Series:
                 r.raise_for_status()
                 if not r.text.startswith("MARGINALPDBC"):
                     raise ValueError(f"versión .{version} no disponible")
-                return leer_fichero(r.text, entrega)
+                return leer_fichero(r.text, entrega, horario)
             except requests.HTTPError as e:
                 ultimo_error = e
                 if e.response is not None and e.response.status_code == 404:

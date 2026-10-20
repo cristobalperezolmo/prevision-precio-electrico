@@ -10,6 +10,7 @@ Uso:
     python enviar_prevision.py --version v0       # benchmark
     python enviar_prevision.py --fecha 2026-10-25 # un día concreto
     python enviar_prevision.py --dry-run          # calcula y valida, pero no envía
+    python enviar_prevision.py --resolucion PT15M # previsión a 15 minutos (96/92/100 periodos)
 
 Respaldo: si el v1 falla (datos o modelo), se envía el benchmark con el código del v1.
 Si no se pueden descargar los precios del día de referencia, se prueba con otros días ya
@@ -50,13 +51,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--fecha", type=date.fromisoformat, help="día de entrega (YYYY-MM-DD)")
     parser.add_argument("--version", choices=list(CODIGOS), default="v1")
+    parser.add_argument("--resolucion", choices=["PT60M", "PT15M"], default="PT60M")
     parser.add_argument("--dry-run", action="store_true", help="no envía nada")
     args = parser.parse_args()
+    minutos = 15 if args.resolucion == "PT15M" else 60
 
     load_dotenv()
     entrega = args.fecha or proxima_entrega_abierta()
     args.modelo = CODIGOS[args.version]
-    print(f"Día de entrega: {entrega} ({len(periodos_utc(entrega))} periodos), "
+    print(f"Día de entrega: {entrega} ({len(periodos_utc(entrega, minutos))} periodos {args.resolucion}), "
           f"cutoff {cutoff(entrega):%Y-%m-%d %H:%M %Z}, modelo {args.modelo}")
 
     api_key = os.getenv("FORECASTSCORE_API_KEY")
@@ -64,9 +67,9 @@ def main():
 
     # 1. Comprobar con la plataforma que los periodos coinciden con nuestro calendario
     if cliente:
-        info = cliente.periodos(entrega)
+        info = cliente.periodos(entrega, resolucion=args.resolucion)
         inicios_api = [p["period_start"] for p in info["periods"]]
-        nuestros = [t.strftime("%Y-%m-%dT%H:%M:%SZ") for t in periodos_utc(entrega)]
+        nuestros = [t.strftime("%Y-%m-%dT%H:%M:%SZ") for t in periodos_utc(entrega, minutos)]
         print(f"Plataforma: estado={info['state']}, periodos={info['period_count']}, "
               f"deadline={info['submission_deadline']}")
         if [s.replace("+00:00", "Z") for s in inicios_api] != nuestros:
@@ -84,7 +87,7 @@ def main():
         try:
             from prevision import modelo
             prevision, avisos_modelo = modelo.predecir(entrega)
-            precios = validacion.preparar(entrega, prevision)
+            precios = validacion.preparar(entrega, prevision)  # la horaria se valida siempre
             avisos += avisos_modelo  # fuentes secundarias caídas: se envía igual, pero se avisa
             print("Previsión del modelo v1 lista")
         except Exception as e:  # noqa: BLE001 - cualquier fallo: caer al benchmark
@@ -97,13 +100,34 @@ def main():
         print(f"Benchmark con referencia {dia_usado}")
         if dia_usado != oficial:
             avisos.append(f"Benchmark con día de respaldo {dia_usado} (el oficial era {oficial})")
+        es_benchmark = True
+    else:
+        es_benchmark = False
+
+    # 2b. A 15 minutos: horaria + forma reciente dentro de cada hora (o benchmark cuartohorario)
+    if minutos == 15:
+        from prevision import cuartos
+        try:
+            q = cuartos.cuartos_recientes(entrega)
+        except Exception as e:  # noqa: BLE001
+            q = None
+            avisos.append(f"Sin precios cuartohorarios recientes ({e}); se reparte la horaria sin forma")
+        precios15 = None
+        if es_benchmark and q is not None:
+            try:
+                precios15 = cuartos.benchmark_cuartos(entrega, q)
+            except Exception as e:  # noqa: BLE001
+                avisos.append(f"Benchmark cuartohorario no disponible ({e})")
+        if precios15 is None:
+            precios15 = cuartos.a_cuartos(precios, entrega, q)
+        precios = validacion.preparar(entrega, precios15, minutos)
     print(precios.to_string())
 
     # 3. Enviar
     if args.dry_run:
         print("Dry run: no se envía nada.")
         return
-    respuesta = cliente.enviar(args.modelo, entrega, precios)
+    respuesta = cliente.enviar(args.modelo, entrega, precios, resolucion=args.resolucion)
     print(f"Enviado: id={respuesta['id']} versión={respuesta['version']} "
           f"estado={respuesta['status']} a las {respuesta['submitted_at']}")
     if avisos:

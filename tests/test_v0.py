@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -117,3 +118,20 @@ def test_variables_extra_y_modelo_en_dias_de_cambio_de_hora():
         prevision, avisos = modelo.predecir(entrega, _datos_sinteticos(desde, 45))
         precios = validacion.preparar(entrega, prevision)
         assert len(precios) == len(periodos_utc(entrega)) and avisos == []
+
+
+def test_cuartos_de_hora_dias_de_cambio_de_hora():
+    """La previsión a 15 min tiene 96/100/92 periodos y respeta la media de cada hora."""
+    from prevision import cuartos
+    for entrega, n in ((date(2026, 10, 22), 96), (OCTUBRE, 100), (MARZO, 92)):
+        horaria = pd.Series(50.0 + np.arange(len(periodos_utc(entrega))), index=periodos_utc(entrega))
+        # forma inventada: cada hora sube 4 €/MWh de un cuarto al siguiente
+        dias_prev = [entrega - pd.Timedelta(days=i) for i in range(1, 8)]
+        q = pd.concat([pd.Series(np.tile([-6.0, -2.0, 2.0, 6.0], len(periodos_utc(d, 15)) // 4),
+                                 index=periodos_utc(d, 15)) for d in dias_prev])
+        p = validacion.preparar(entrega, cuartos.a_cuartos(horaria, entrega, q), 15)
+        assert len(p) == n
+        assert p.resample("1h").mean().round(6).equals(horaria.round(6))
+        assert list(p.iloc[:4]) == [44.0, 48.0, 52.0, 56.0]
+        sin_forma = cuartos.a_cuartos(horaria, entrega, None)
+        assert (sin_forma.resample("1h").mean() == horaria).all()

@@ -176,3 +176,61 @@ COLUMNAS_NO_VARIABLE = ["entrega", "objetivo", "escala"]
 
 def columnas_modelo(X: pd.DataFrame) -> list[str]:
     return [c for c in X.columns if c not in COLUMNAS_NO_VARIABLE]
+
+
+def anadir_extras2(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
+    """Variables en pruebas: gas español (MIBGAS), CO2, intercambios y bombeo (REData) e índices
+    eólico/solar con más puntos ponderados. Si falta una fuente, sus columnas quedan vacías."""
+    from prevision.datos_extra import PUNTOS_EOLICOS, PUNTOS_SOLARES
+    X = X.copy()
+    entrega = pd.Series(X["entrega"].values, index=X.index)
+    D = entrega - timedelta(days=1)
+
+    if "mibgas" in datos:  # índice del día D (fijado en la negociación de D-1)
+        g = datos["mibgas"]
+        X["mibgas_D"] = D.map(g).values
+        X["mibgas_cambio7"] = X["mibgas_D"] - (D - timedelta(days=7)).map(g).values
+    if "co2" in datos:  # último cierre antes de D
+        c = datos["co2"].sort_index()
+        dias = pd.Index(c.index)
+        pos = dias.searchsorted(list(D), side="left") - 1
+        X["co2"] = [c.iloc[p] if p >= 0 else np.nan for p in pos]
+    if "balance" in datos:  # último día completo: E-2. En GW medios
+        b = datos["balance"] / 24000
+        for col in b.columns:
+            X[f"b_{col}"] = (entrega - timedelta(days=2)).map(b[col]).values
+
+    modelos = datos.get("meteo2_modelos", {})
+    if modelos:
+        pe = {k: v[2] for k, v in PUNTOS_EOLICOS.items()}
+        ps = {k: v[2] for k, v in PUNTOS_SOLARES.items()}
+        eol, sol = [], []
+        for m in modelos.values():
+            v = m[[f"wind_speed_100m__{k}" for k in pe]].clip(upper=45)
+            # curva de potencia aproximada: 0 por debajo de 11 km/h, satura a 45 km/h
+            cf = ((v - 11).clip(lower=0) / (45 - 11)).pow(2).clip(upper=1)
+            eol.append((cf * list(pe.values())).sum(axis=1) / sum(pe.values()))
+            r = m[[f"shortwave_radiation__{k}" for k in ps]]
+            sol.append((r * list(ps.values())).sum(axis=1) / sum(ps.values()))
+        for nombre, lista in (("idx_eolico", eol), ("idx_solar", sol)):
+            serie = pd.concat(lista, axis=1).mean(axis=1)
+            X[nombre] = serie.reindex(X.index).values
+            X[f"{nombre}_D"] = serie.reindex(X.index - pd.Timedelta(days=1)).values
+            X[f"{nombre}_dif"] = X[nombre] - X[f"{nombre}_D"]
+            diaria = serie.groupby(serie.index.tz_convert(MADRID).date).mean()
+            X[f"{nombre}_E"] = entrega.map(diaria).values
+            X[f"{nombre}_dd"] = X[f"{nombre}_E"] - D.map(diaria).values
+    return X
+
+
+def cargar_extras2(datos: dict) -> dict:
+    """Añade al diccionario de datos las fuentes en pruebas que existan en data/."""
+    from prevision.historico import MODELOS_METEO
+    for nombre, col in (("mibgas", "mibgas"), ("co2", "co2")):
+        if (CARPETA / f"{nombre}.parquet").exists():
+            datos[nombre] = pd.read_parquet(CARPETA / f"{nombre}.parquet")[col]
+    if (CARPETA / "balance.parquet").exists():
+        datos["balance"] = pd.read_parquet(CARPETA / "balance.parquet")
+    datos["meteo2_modelos"] = {m: pd.read_parquet(CARPETA / f"meteo2_{m}.parquet") for m in MODELOS_METEO
+                               if (CARPETA / f"meteo2_{m}.parquet").exists()}
+    return datos

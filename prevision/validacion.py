@@ -9,9 +9,9 @@ from prevision.calendario import periodos_utc
 PRECIO_MIN, PRECIO_MAX = -1000, 4000
 
 
-def preparar(entrega: date, precios: pd.Series) -> pd.Series:
+def preparar(entrega: date, precios: pd.Series, minutos: int = 60) -> pd.Series:
     """Devuelve la previsión redondeada a 2 decimales o lanza ValueError si algo no cuadra."""
-    esperados = periodos_utc(entrega)
+    esperados = periodos_utc(entrega, minutos)
     if len(precios) != len(esperados) or not precios.index.equals(esperados):
         raise ValueError(f"{entrega}: se esperaban {len(esperados)} periodos, hay {len(precios)}")
     if precios.isna().any():
