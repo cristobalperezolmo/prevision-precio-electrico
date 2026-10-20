@@ -1,0 +1,51 @@
+# Cuaderno de experimentos
+
+Protocolo: walk-forward, recalibración mensual (salvo que se diga otra cosa), test desde ene-2025.
+Se elige con **2025 (ajuste)** y se confirma con **2026 (confirmación, ene-oct)**. rMAE = MAE / MAE del benchmark.
+
+## Referencia
+| Modelo | rMAE 2025 | rMAE 2026 |
+|---|---|---|
+| v1 inicial (1 LightGBM) | 0,598 | 0,639 |
+| v1 en producción (media de 4 LightGBM, ext) | 0,563 | 0,600 |
+
+## Ronda 1 (20-oct): fuentes ext (GFS/ICON, REData) y variantes — ver `ronda` de mejoras_v1.py
+- Fuentes nuevas: 0,598 → 0,572 / 0,639 → 0,612.
+- Pesos de la métrica, vida media 180, árboles de 15 hojas: no aportan.
+- Un modelo por estación: mucho peor (0,64 / 0,73). Por tramos del día: igual que el modelo único.
+- Media de 4 variantes: 0,563 / 0,600 → **en producción**.
+
+## Ronda 2: fuentes ext2 (MIBGAS, CO2, intercambios y bombeo de REData, índices eólico/solar con 24 puntos)
+- extras: 0,572 → 0,567 / 0,612 → 0,588
+- reciente365: 0,575 → 0,567 / 0,607 → 0,583
+- hojas63: 0,577 → 0,565 / 0,609 → 0,587 · tramos: 0,573 → 0,566 / 0,615 → 0,598
+- **Media de las 4 (ext2): 0,555 / 0,578** (producción: 0,563 / 0,600)
+- Media de 4 (ext2) + 15 % LEAR: **0,550 / 0,575**
+
+## LEAR (Lasso por hora, epftoolbox)
+- Todo el histórico, recalibración cada 28 días: 0,660 / 0,710 solo; **20 % LEAR + 80 % LightGBM: 0,557 / 0,592**.
+- Recalibración semanal: todo 0,641 / 0,697 · ventana 364 d 0,675 / 0,733 · ventana 182 d 0,752 / 0,821.
+- Media de ventanas (todo+364+182): 0,653 / 0,709 → no ayuda (ventanas cortas = pocas filas para ~350 variables).
+- En la mezcla con LightGBM ext2 (15 %): semanal 0,548 / 0,573 vs cada 28 días 0,550 / 0,575 → diferencia mínima.
+
+## 15 minutos (PT15M)
+- Desde oct-2025 OMIE es cuartohorario. Pasar la previsión horaria a cuartos:
+  plano 0,625 · forma de D 0,595 · **forma media de 7 días 0,588** · interpolación 0,594 (rMAE frente al benchmark a 15 min).
+- Ranking PT15M de ES: un competidor activo (rogarui, 2 modelos, MAE 34 y 31 el 20-oct;
+  nuestro backtest ese día: 22). Ranking PT60M: casi vacío.
+
+## Corrección del sesgo reciente (sobre media ext2 + 15 % LEAR)
+A las 10 UTC de D se conocen los precios reales de D, así que se conoce el error de nuestra previsión de D.
+Corrección: restar k × (media exponencial de los errores pasados a esa misma hora).
+- Sin corrección: 0,550 / 0,575
+- Media móvil 14 días por hora, k=0,5: 0,541 / 0,557
+- **Media exponencial, vida media 14 días, k=0,7: 0,539 / 0,555** (vida media 7–28 y k 0,5–1 dan 0,539–0,547 / 0,554–0,560: estable)
+- Para producción: guardar cada día la previsión (sin corregir) para calcular los errores.
+
+## Ronda 3 (tabla ext3 = ext2 + perfil 24 h de D), variante única "extras" (ext2: 0,567 / 0,588)
+- Ventana 730 días: 0,568 / 0,581 (en 2025 casi igual porque apenas hay más de 2 años)
+- Objetivo = diferencia con el día de referencia del benchmark: 0,597 / 0,630 → peor
+- Perfil 24 h de D como variables: 0,562 / 0,620 → mejora 2025 pero empeora mucho 2026 (inestable): descartado
+
+## Red neuronal (MLP 256-128, 24 salidas, entradas de LEAR, 3 semillas, recalibración mensual)
+- Sola: 0,710 / 0,721. En la mezcla (+10 %): 0,548/0,573 → 0,547/0,570. Mejora mínima: no compensa la complejidad.

@@ -83,10 +83,11 @@ def main():
     # 2. Calcular y validar
     avisos = []
     precios = None
+    cruda = None  # previsión del v1 sin corregir el sesgo: se guarda en el registro
     if args.version == "v1":
         try:
             from prevision import modelo
-            prevision, avisos_modelo = modelo.predecir(entrega)
+            prevision, avisos_modelo, cruda = modelo.predecir(entrega)
             precios = validacion.preparar(entrega, prevision)  # la horaria se valida siempre
             avisos += avisos_modelo  # fuentes secundarias caídas: se envía igual, pero se avisa
             print("Previsión del modelo v1 lista")
@@ -130,6 +131,10 @@ def main():
     respuesta = cliente.enviar(args.modelo, entrega, precios, resolucion=args.resolucion)
     print(f"Enviado: id={respuesta['id']} versión={respuesta['version']} "
           f"estado={respuesta['status']} a las {respuesta['submitted_at']}")
+    if cruda is not None and minutos == 60:
+        from prevision import sesgo
+        sesgo.guardar_en_registro(cruda)
+        print(f"Registro actualizado: {sesgo.REGISTRO.name}")
     if avisos:
         raise SystemExit("Enviado, pero con respaldo:\n" + "\n".join(avisos))
 

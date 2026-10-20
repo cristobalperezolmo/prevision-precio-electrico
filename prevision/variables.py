@@ -234,3 +234,14 @@ def cargar_extras2(datos: dict) -> dict:
     datos["meteo2_modelos"] = {m: pd.read_parquet(CARPETA / f"meteo2_{m}.parquet") for m in MODELOS_METEO
                                if (CARPETA / f"meteo2_{m}.parquet").exists()}
     return datos
+
+
+def anadir_perfil_D(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
+    """Los 24 precios de D (y la media horaria de D-6) como columnas, como en LEAR."""
+    X = X.copy()
+    P = tabla_diaria(datos["precios"]).reindex(columns=range(24))
+    D = pd.to_datetime(pd.Series(X["entrega"].values)) - pd.Timedelta(days=1)
+    perfil = P.reindex(D.dt.date.values)
+    for h in range(24):
+        X[f"pD_{h}"] = perfil[h].values
+    return X

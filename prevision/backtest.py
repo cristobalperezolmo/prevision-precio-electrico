@@ -63,12 +63,22 @@ def pesos_entrenamiento(X, ponderar=None, vida_media=None) -> np.ndarray | None:
     return w / w.mean()
 
 
+def referencia(X: pd.DataFrame, objetivo: str) -> np.ndarray:
+    """Valor del que se predice la diferencia: precio de D (diferencia), del día de referencia del
+    benchmark (diferencia_ref) o nada (directo)."""
+    if objetivo == "diferencia":
+        return X["p_D_h"].fillna(X["p_D_media"]).values
+    if objetivo == "diferencia_ref":
+        return X["p_ref_h"].fillna(X["p_D_h"]).fillna(X["p_D_media"]).values
+    return np.zeros(len(X))
+
+
 def entrenar(X: pd.DataFrame, params=None, objetivo="diferencia", ponderar=None, vida_media=None,
              columnas=None) -> lgb.LGBMRegressor:
     """objetivo='diferencia': el modelo aprende cuánto cambia el precio respecto a D (misma hora)."""
     params = {**PARAMS, **(params or {})}
     X = X[X["objetivo"].notna()]
-    y = X["objetivo"] - X["p_D_h"].fillna(X["p_D_media"]) if objetivo == "diferencia" else X["objetivo"]
+    y = X["objetivo"] - referencia(X, objetivo)
     columnas = columnas or columnas_modelo(X)
     modelo = lgb.LGBMRegressor(**params)
     modelo.fit(X[columnas], y, sample_weight=pesos_entrenamiento(X, ponderar, vida_media))
@@ -78,9 +88,7 @@ def entrenar(X: pd.DataFrame, params=None, objetivo="diferencia", ponderar=None,
 
 
 def predecir(modelo, X: pd.DataFrame) -> pd.Series:
-    pred = modelo.predict(X[modelo.columnas_])
-    if modelo.objetivo_ == "diferencia":
-        pred = pred + X["p_D_h"].fillna(X["p_D_media"]).values
+    pred = modelo.predict(X[modelo.columnas_]) + referencia(X, modelo.objetivo_)
     return pd.Series(pred, index=X.index)
 
 
@@ -101,14 +109,19 @@ def segmento(X: pd.DataFrame, segmentar: str | None) -> pd.Series:
 
 
 def walk_forward(X: pd.DataFrame, desde_test: date, hasta_test: date | None = None,
-                 desde_train: date | None = None, semillas=(0,), segmentar=None, **kw) -> pd.Series:
+                 desde_train: date | None = None, semillas=(0,), segmentar=None, ventana_dias=None,
+                 frecuencia="M", **kw) -> pd.Series:
     """kw se pasa a entrenar(): params, objetivo, ponderar, vida_media, columnas.
-    segmentar: None (un modelo), 'tramos' (por tramo del día), 'estacion' o 'tramos_estacion'."""
-    meses = pd.period_range(desde_test, hasta_test or X["entrega"].max(), freq="M")
+    segmentar: None (un modelo), 'tramos' (por tramo del día), 'estacion' o 'tramos_estacion'.
+    ventana_dias: entrenar solo con los últimos N días. frecuencia: 'M' (mensual) o 'W' (semanal)."""
+    meses = pd.period_range(desde_test, hasta_test or X["entrega"].max(), freq=frecuencia)
     preds = []
     for mes in meses:
         inicio, fin = mes.start_time.date(), mes.end_time.date()
+        inicio = max(inicio, desde_test)
         train = X[(X["entrega"] < inicio) & ((X["entrega"] >= desde_train) if desde_train else True)]
+        if ventana_dias:
+            train = train[train["entrega"] >= inicio - pd.Timedelta(days=ventana_dias)]
         test = X[(X["entrega"] >= inicio) & (X["entrega"] <= fin)]
         if test.empty:
             continue

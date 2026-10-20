@@ -80,35 +80,46 @@ class Escalador:
         return np.sinh(Z) * self.mad + self.med
 
 
+class LEAR:
+    """24 modelos Lasso (uno por hora) con sus escaladores. Se puede guardar con joblib."""
+
+    def fit(self, F_train: pd.DataFrame, Y_train: pd.DataFrame):
+        ok = F_train.notna().all(axis=1) & Y_train.notna().all(axis=1)
+        F_train, Y_train = F_train[ok], Y_train[ok]
+        columnas = [c for c in F_train.columns if F_train[c].std() > 0]
+        self.dummies = [c for c in columnas if c.startswith("dow") or c == "festivo"]
+        self.continuas = [c for c in columnas if c not in self.dummies]
+        self.ex = Escalador().ajustar(F_train[self.continuas].values)
+        self.ey = Escalador().ajustar(Y_train.values)
+        A = self._preparar(F_train)
+        Z = self.ey.transformar(Y_train.values)
+        self.modelos = []
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ConvergenceWarning)
+            for h in range(24):
+                if len(A) > 1.5 * A.shape[1]:
+                    # Como epftoolbox: alpha por criterio de información (rápido)
+                    m = LassoLarsIC(criterion="aic", max_iter=2000).fit(A, Z[:, h])
+                else:
+                    # Pocas filas para tantas variables: alpha por validación cruzada temporal
+                    m = LassoCV(alphas=40, cv=TimeSeriesSplit(4), max_iter=5000, n_jobs=4).fit(A, Z[:, h])
+                self.modelos.append(m)
+        return self
+
+    def _preparar(self, F):
+        A = self.ex.transformar(F.reindex(columns=self.continuas)
+                                .fillna(pd.Series(self.ex.med, index=self.continuas)).values)
+        return np.hstack([A, F.reindex(columns=self.dummies).fillna(0).values])
+
+    def predict(self, F: pd.DataFrame) -> np.ndarray:
+        """Devuelve (n_dias, 24) precios previstos."""
+        A = self._preparar(F)
+        return self.ey.invertir(np.column_stack([m.predict(A) for m in self.modelos]))
+
+
 def ajustar_y_predecir(F_train, Y_train, F_test) -> np.ndarray:
     """Entrena 24 Lasso (uno por hora) y predice las filas de F_test. Devuelve (n_test, 24)."""
-    ok = F_train.notna().all(axis=1) & Y_train.notna().all(axis=1)
-    F_train, Y_train = F_train[ok], Y_train[ok]
-    columnas = [c for c in F_train.columns if F_train[c].std() > 0]
-    dummies = [c for c in columnas if c.startswith("dow") or c == "festivo"]
-    continuas = [c for c in columnas if c not in dummies]
-
-    ex = Escalador().ajustar(F_train[continuas].values)
-    ey = Escalador().ajustar(Y_train.values)
-
-    def preparar(F):
-        A = ex.transformar(F[continuas].fillna(pd.Series(ex.med, index=continuas)).values)
-        return np.hstack([A, F[dummies].values])
-
-    A_train, A_test = preparar(F_train), preparar(F_test)
-    Z = ey.transformar(Y_train.values)
-    salida = np.zeros((len(F_test), 24))
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", ConvergenceWarning)
-        for h in range(24):
-            if len(A_train) > 1.5 * A_train.shape[1]:
-                # Como epftoolbox: alpha por criterio de información (rápido)
-                m = LassoLarsIC(criterion="aic", max_iter=2000).fit(A_train, Z[:, h])
-            else:
-                # Pocas filas para tantas variables: alpha por validación cruzada temporal
-                m = LassoCV(alphas=40, cv=TimeSeriesSplit(4), max_iter=5000, n_jobs=4).fit(A_train, Z[:, h])
-            salida[:, h] = m.predict(A_test)
-    return ey.invertir(salida)
+    return LEAR().fit(F_train, Y_train).predict(F_test)
 
 
 def walk_forward_lear(F: pd.DataFrame, Y: pd.DataFrame, desde_test, ventana_dias: int | None,

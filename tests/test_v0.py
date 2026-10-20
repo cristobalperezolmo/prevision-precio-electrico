@@ -96,8 +96,15 @@ def _datos_sinteticos(desde: date, dias: int) -> dict:
     from prevision.historico import MODELOS_METEO, TECNOLOGIAS
     redata = pd.DataFrame({c: 100000.0 for c in TECNOLOGIAS.values()},
                           index=[desde + timedelta(days=i) for i in range(dias + 1)])
+    from prevision.datos_extra import BALANCE, PUNTOS_EOLICOS, PUNTOS_SOLARES
+    dias_idx = [desde + timedelta(days=i) for i in range(dias + 1)]
+    meteo2 = pd.DataFrame({**{f"wind_speed_100m__{k}": 20.0 for k in PUNTOS_EOLICOS},
+                           **{f"shortwave_radiation__{k}": 200.0 for k in PUNTOS_SOLARES}}, index=horas)
     return {"precios": precios, "meteo": meteo, "gas": gas, "redata": redata,
-            "meteo_modelos": {m: meteo for m in MODELOS_METEO}}
+            "meteo_modelos": {m: meteo for m in MODELOS_METEO},
+            "meteo2_modelos": {m: meteo2 for m in MODELOS_METEO},
+            "mibgas": pd.Series(30.0, index=dias_idx), "co2": pd.Series(70.0, index=dias_idx),
+            "balance": pd.DataFrame({c: 1000.0 for c in BALANCE.values()}, index=dias_idx)}
 
 
 def test_variables_dias_de_cambio_de_hora():
@@ -115,9 +122,11 @@ def test_variables_extra_y_modelo_en_dias_de_cambio_de_hora():
     """El modelo guardado en modelos/ predice un valor válido para cada periodo, también con 25 y 23 horas."""
     from prevision import modelo
     for entrega, desde in ((OCTUBRE, date(2026, 9, 20)), (MARZO, date(2027, 2, 20))):
-        prevision, avisos = modelo.predecir(entrega, _datos_sinteticos(desde, 45))
+        prevision, avisos, cruda = modelo.predecir(entrega, _datos_sinteticos(desde, 45),
+                                                   registro=pd.Series(dtype=float))
         precios = validacion.preparar(entrega, prevision)
         assert len(precios) == len(periodos_utc(entrega)) and avisos == []
+        assert prevision.equals(cruda)  # sin registro no hay corrección de sesgo
 
 
 def test_cuartos_de_hora_dias_de_cambio_de_hora():
@@ -135,3 +144,20 @@ def test_cuartos_de_hora_dias_de_cambio_de_hora():
         assert list(p.iloc[:4]) == [44.0, 48.0, 52.0, 56.0]
         sin_forma = cuartos.a_cuartos(horaria, entrega, None)
         assert (sin_forma.resample("1h").mean() == horaria).all()
+
+
+def test_correccion_de_sesgo():
+    """Si el modelo se pasó 10 €/MWh todos los días a las 08:00, la corrección resta el 70 % de eso."""
+    from prevision import sesgo
+    dias = [date(2026, 9, 1) + pd.Timedelta(days=i) for i in range(30)]
+    reales = pd.concat([pd.Series(50.0, index=periodos_utc(d)) for d in dias])
+    registro = reales.copy()
+    registro[registro.index.tz_convert("Europe/Madrid").hour == 8] += 10
+    entrega = date(2026, 10, 1)
+    prevision = pd.Series(60.0, index=periodos_utc(entrega))
+    corregida, _ = sesgo.aplicar(prevision, entrega, registro, reales)
+    horas = corregida.index.tz_convert("Europe/Madrid").hour
+    assert corregida[horas == 8].iloc[0] == pytest.approx(60 - 0.7 * 10)
+    assert (corregida[horas != 8] == 60).all()
+    # con pocos días en el registro no se corrige
+    assert sesgo.aplicar(prevision, entrega, registro.iloc[:48], reales)[0].equals(prevision)

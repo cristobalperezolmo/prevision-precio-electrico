@@ -86,7 +86,7 @@ PUNTOS_SOLARES = {
 VARS2 = ["wind_speed_100m", "shortwave_radiation"]
 
 
-def descargar_meteo2(desde: date, hasta: date, modelo: str) -> pd.DataFrame:
+def descargar_meteo2(desde: date, hasta: date, modelo: str, rapido: bool = False) -> pd.DataFrame:
     puntos = {**{k: v for k, v in PUNTOS_EOLICOS.items()}, **PUNTOS_SOLARES}
     nombres = list(puntos)
     r = _get_con_reintentos(URL_METEO, params={
@@ -95,7 +95,7 @@ def descargar_meteo2(desde: date, hasta: date, modelo: str) -> pd.DataFrame:
         "hourly": ",".join(f"{v}_previous_day2" for v in VARS2),
         "start_date": desde.isoformat(), "end_date": hasta.isoformat(),
         "timezone": "GMT", "models": modelo,
-    })
+    }, **({"intentos": 3, "espera": 20, "timeout": 40} if rapido else {}))
     columnas = {}
     for nombre, bloque in zip(nombres, r.json()):
         horas = pd.to_datetime(bloque["hourly"]["time"]).tz_localize("UTC")
