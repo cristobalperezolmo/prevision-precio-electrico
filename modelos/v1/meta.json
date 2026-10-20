@@ -1,17 +1,7 @@
 {
-  "objetivo": "diferencia",
   "desde_train": "2023-01-08",
-  "semillas": [
-    0,
-    1,
-    2,
-    3,
-    4
-  ],
-  "params": {
-    "objective": "huber",
-    "alpha": 15
-  },
+  "entrenado_hasta": "2026-10-21",
+  "filas": 33191,
   "columnas": [
     "hora",
     "dia_semana",
@@ -61,8 +51,79 @@
     "m_temp_D",
     "d_temp",
     "md_temp_E",
-    "dd_temp"
+    "dd_temp",
+    "mm_viento",
+    "mm_viento_disp",
+    "mm_viento_D",
+    "mmd_viento",
+    "mm_viento_E",
+    "mmdd_viento",
+    "mm_viento3",
+    "mm_viento3_disp",
+    "mm_viento3_D",
+    "mmd_viento3",
+    "mm_viento3_E",
+    "mmdd_viento3",
+    "mm_sol",
+    "mm_sol_disp",
+    "mm_sol_D",
+    "mmd_sol",
+    "mm_sol_E",
+    "mmdd_sol",
+    "mm_nubes",
+    "mm_nubes_disp",
+    "mm_nubes_D",
+    "mmd_nubes",
+    "mm_nubes_E",
+    "mmdd_nubes",
+    "mm_temp",
+    "mm_temp_disp",
+    "mm_temp_D",
+    "mmd_temp",
+    "mm_temp_E",
+    "mmdd_temp",
+    "r_hidraulica",
+    "r_nuclear",
+    "r_ciclo",
+    "r_eolica",
+    "r_solar",
+    "r_cogeneracion",
+    "r_generacion_total",
+    "r_demanda",
+    "r_nuclear_cambio7",
+    "r_hidraulica_cambio7",
+    "r_hidraulica_media7",
+    "p_D_horas_cero",
+    "p_D_hmenos1",
+    "p_D_hmas1",
+    "p_28_media_h"
   ],
-  "entrenado_hasta": "2026-10-21",
-  "filas": 33191
+  "variantes": {
+    "extras": {
+      "segmentar": null,
+      "ficheros": {
+        "todo": "extras__todo.txt.gz"
+      }
+    },
+    "reciente365": {
+      "segmentar": null,
+      "ficheros": {
+        "todo": "reciente365__todo.txt.gz"
+      }
+    },
+    "hojas63": {
+      "segmentar": null,
+      "ficheros": {
+        "todo": "hojas63__todo.txt.gz"
+      }
+    },
+    "tramos": {
+      "segmentar": "tramos",
+      "ficheros": {
+        "madrugada": "tramos__madrugada.txt.gz",
+        "solar": "tramos__solar.txt.gz",
+        "tarde_noche": "tramos__tarde_noche.txt.gz"
+      }
+    }
+  }
 }

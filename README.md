@@ -7,19 +7,26 @@ siguiente y lo envía cada día a [Forecast Score](https://forecastscore.eu), qu
 
 ## Resultados del backtest (walk-forward, ene-2025 a oct-2026)
 
-Reentrenando cada mes con todo lo anterior y prediciendo con la información disponible antes del cutoff:
+Reentrenando cada mes con todo lo anterior y prediciendo con la información disponible antes del cutoff.
+Las variantes se eligieron con 2025 y se confirmaron con 2026 (`experimentos/mejoras_v1.py`).
 
-| Modelo | MAE (€/MWh) | P90 error | Sesgo | rMAE |
-|---|---|---|---|---|
-| Benchmark (v0) | 22,1 | – | – | 1,00 |
-| **v1 LightGBM** | **13,6** | 30,5 | +0,7 | **0,62** |
+| Modelo | rMAE 2025 (ajuste) | rMAE 2026 (confirmación) |
+|---|---|---|
+| Benchmark (v0) | 1,00 | 1,00 |
+| v1 inicial (un LightGBM) | 0,598 | 0,639 |
+| **v1 actual (media de 4 LightGBM + fuentes nuevas)** | **0,563** | **0,600** |
 
-El v1 bate al benchmark en los 22 meses (rMAE mensual entre 0,42 y 0,97).
+Lo que funcionó: consenso de 3 modelos meteorológicos (ECMWF, GFS, ICON), generación real de REData
+(nuclear, hidráulica…) y promediar variantes. Lo que no: un modelo por estación (pocos datos por estación),
+pesos como la métrica de la plataforma, árboles más pequeños.
 
-**Variables del v1**: precios de D por hora (y de D-1, E-7, medias y volatilidad de 7 días),
-calendario y festivos, gas TTF del día hábil anterior, y previsiones meteorológicas
-(viento a 100 m, radiación, nubes y temperatura en 12 puntos) emitidas ~48 h antes
-(Open-Meteo Previous Runs, ECMWF IFS). El modelo predice la *diferencia* respecto al precio de D.
+**Variables**: precios de D por hora (y de D-1, E-7, horas vecinas, medias de 7 y 28 días, horas a 0 €),
+calendario y festivos, gas TTF del día hábil anterior, generación real por tecnología de D-1 (REData),
+y previsiones meteorológicas (viento a 100 m, radiación, nubes y temperatura en 12 puntos) emitidas ~48 h
+antes (Open-Meteo Previous Runs). El modelo predice la *diferencia* respecto al precio de D.
+
+**Respaldos**: si cae GFS, ICON, REData o el gas, se predice sin esa fuente y se avisa por email;
+si cae toda la meteorología o el modelo, se envía el benchmark.
 
 ## Uso
 
@@ -47,7 +54,8 @@ prevision/historico.py      descarga de histórico (OMIE, Open-Meteo, TTF)
 prevision/variables.py      construcción de variables sin fugas de datos
 prevision/backtest.py       backtest walk-forward y métricas
 prevision/modelo.py         entrenamiento y predicción del v1
-modelos/v1/                 modelo entrenado (5 semillas)
+modelos/v1/                 modelo entrenado (4 variantes, comprimidas)
+experimentos/               comparación de variantes
 enviar_prevision.py         script diario (con respaldo si falla la descarga)
 .github/workflows/          envío automático con GitHub Actions
 ```

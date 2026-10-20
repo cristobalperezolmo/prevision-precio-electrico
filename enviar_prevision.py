@@ -83,7 +83,9 @@ def main():
     if args.version == "v1":
         try:
             from prevision import modelo
-            precios = validacion.preparar(entrega, modelo.predecir(entrega))
+            prevision, avisos_modelo = modelo.predecir(entrega)
+            precios = validacion.preparar(entrega, prevision)
+            avisos += avisos_modelo  # fuentes secundarias caídas: se envía igual, pero se avisa
             print("Previsión del modelo v1 lista")
         except Exception as e:  # noqa: BLE001 - cualquier fallo: caer al benchmark
             avisos.append(f"El modelo v1 falló ({type(e).__name__}: {e}); se envía el benchmark")

@@ -92,7 +92,11 @@ def _datos_sinteticos(desde: date, dias: int) -> dict:
     precios = pd.Series(50 + 30 * np.sin(np.arange(len(horas)) / 24 * 2 * np.pi), index=horas)
     meteo = pd.DataFrame({f"{v}__{p}": 10.0 for v in VARIABLES for p in PUNTOS}, index=horas)
     gas = pd.Series(30.0, index=[desde + timedelta(days=i) for i in range(dias + 1)])
-    return {"precios": precios, "meteo": meteo, "gas": gas}
+    from prevision.historico import MODELOS_METEO, TECNOLOGIAS
+    redata = pd.DataFrame({c: 100000.0 for c in TECNOLOGIAS.values()},
+                          index=[desde + timedelta(days=i) for i in range(dias + 1)])
+    return {"precios": precios, "meteo": meteo, "gas": gas, "redata": redata,
+            "meteo_modelos": {m: meteo for m in MODELOS_METEO}}
 
 
 def test_variables_dias_de_cambio_de_hora():
@@ -104,3 +108,12 @@ def test_variables_dias_de_cambio_de_hora():
     assert not X[columnas_modelo(X)].isna().all().any()
     datos = _datos_sinteticos(date(2027, 3, 1), 40)
     assert len(construir([MARZO], datos)) == 23
+
+
+def test_variables_extra_y_modelo_en_dias_de_cambio_de_hora():
+    """El modelo guardado en modelos/ predice un valor válido para cada periodo, también con 25 y 23 horas."""
+    from prevision import modelo
+    for entrega, desde in ((OCTUBRE, date(2026, 9, 20)), (MARZO, date(2027, 2, 20))):
+        prevision, avisos = modelo.predecir(entrega, _datos_sinteticos(desde, 45))
+        precios = validacion.preparar(entrega, prevision)
+        assert len(precios) == len(periodos_utc(entrega)) and avisos == []

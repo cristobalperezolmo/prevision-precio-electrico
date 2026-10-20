@@ -22,11 +22,18 @@ CONSUMO = ["madrid", "barcelona", "sevilla", "valencia"]
 
 
 def cargar() -> dict:
-    return {
+    datos = {
         "precios": pd.read_parquet(CARPETA / "precios.parquet")["precio"],
         "meteo": pd.read_parquet(CARPETA / "meteo.parquet"),
         "gas": pd.read_parquet(CARPETA / "gas.parquet")["ttf"],
     }
+    # Opcionales (v1.1): otros modelos meteorológicos y REData
+    from prevision.historico import MODELOS_METEO
+    datos["meteo_modelos"] = {m: pd.read_parquet(CARPETA / f) for m, f in MODELOS_METEO.items()
+                              if (CARPETA / f).exists()}
+    if (CARPETA / "redata.parquet").exists():
+        datos["redata"] = pd.read_parquet(CARPETA / "redata.parquet")
+    return datos
 
 
 def tabla_diaria(precios: pd.Series) -> pd.DataFrame:
@@ -119,7 +126,52 @@ def construir(entregas: list[date], datos: dict) -> pd.DataFrame:
     return X
 
 
-COLUMNAS_NO_VARIABLE = ["entrega", "objetivo"]
+def anadir_extras(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
+    """Variables adicionales (v1.1): consenso de varios modelos meteorológicos, generación real
+    de REData y algunos precios más. Si falta alguna fuente, sus columnas quedan vacías (NaN)."""
+    X = X.copy()
+    entrega = pd.Series(X["entrega"].values, index=X.index)
+    P = tabla_diaria(datos["precios"])
+
+    # 1) Consenso meteorológico: media y discrepancia entre ECMWF, GFS e ICON
+    modelos = [meteo_agregada(m) for m in datos.get("meteo_modelos", {}).values()]
+    if modelos:
+        for var in ("viento", "viento3", "sol", "nubes", "temp"):
+            tabla = pd.concat([m[var] for m in modelos], axis=1)
+            media, disp = tabla.mean(axis=1), tabla.std(axis=1)
+            X[f"mm_{var}"] = media.reindex(X.index).values
+            X[f"mm_{var}_disp"] = disp.reindex(X.index).values
+            X[f"mm_{var}_D"] = media.reindex(X.index - pd.Timedelta(days=1)).values
+            X[f"mmd_{var}"] = X[f"mm_{var}"] - X[f"mm_{var}_D"]
+            diaria = media.groupby(media.index.tz_convert(MADRID).date).mean()
+            X[f"mm_{var}_E"] = entrega.map(diaria).values
+            X[f"mmdd_{var}"] = X[f"mm_{var}_E"] - (entrega - timedelta(days=1)).map(diaria).values
+
+    # 2) REData: el último día completo a las 10 UTC de D es D-1 = E-2. En GW medios.
+    if "redata" in datos:
+        r = datos["redata"] / 24000
+        for col in r.columns:
+            X[f"r_{col}"] = (entrega - timedelta(days=2)).map(r[col]).values
+        for col in ("nuclear", "hidraulica"):
+            if col in r:
+                X[f"r_{col}_cambio7"] = X[f"r_{col}"] - (entrega - timedelta(days=9)).map(r[col]).values
+        if "hidraulica" in r:
+            X["r_hidraulica_media7"] = (entrega - timedelta(days=2)).map(r["hidraulica"].rolling(7).mean()).values
+
+    # 3) Más precios: horas a ~0 € en D (canibalización solar), horas vecinas, media de 28 días
+    horas_cero = (P <= 1).sum(axis=1)
+    X["p_D_horas_cero"] = (entrega - timedelta(days=1)).map(horas_cero).values
+    media28 = P.rolling(28, min_periods=14).mean()
+    D = entrega - timedelta(days=1)
+    for desfase, nombre in ((-1, "p_D_hmenos1"), (1, "p_D_hmas1")):
+        X[nombre] = [P.at[d, h + desfase] if d in P.index and (h + desfase) in P.columns else np.nan
+                     for d, h in zip(D, X["hora"])]
+    X["p_28_media_h"] = [media28.at[d, h] if d in media28.index and h in media28.columns else np.nan
+                         for d, h in zip(D, X["hora"])]
+    return X
+
+
+COLUMNAS_NO_VARIABLE = ["entrega", "objetivo", "escala"]
 
 
 def columnas_modelo(X: pd.DataFrame) -> list[str]:
