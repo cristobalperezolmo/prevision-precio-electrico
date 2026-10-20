@@ -172,3 +172,16 @@ def test_modelo_sin_demanda_prevista_usa_el_otro_juego():
     prevision, avisos, _ = modelo.predecir(date(2026, 10, 22), datos, registro=pd.Series(dtype=float))
     assert len(validacion.preparar(date(2026, 10, 22), prevision)) == 24
     assert avisos == []  # no es un fallo: solo se usa el otro juego
+
+
+def test_archivo_de_datos(tmp_path, monkeypatch):
+    """Se guardan en formato largo las previsiones de D y E, con la hora del guardado."""
+    from prevision import archivo
+    monkeypatch.setattr(archivo, "CARPETA", tmp_path)
+    datos = _datos_sinteticos(date(2026, 9, 20), 45)
+    ruta = archivo.guardar(date(2026, 10, 25), datos)
+    t = pd.read_parquet(ruta)
+    assert set(t["fuente"]) >= {"meteo:ecmwf_ifs025", "meteo2:icon_seamless", "energy-charts", "gas", "mibgas"}
+    horas = t.loc[t["fuente"] == "energy-charts", "instante"].nunique()
+    assert horas == 24 + 25  # D (24 h) y E (25 h, cambio de hora)
+    assert t["guardado_utc"].notna().all()

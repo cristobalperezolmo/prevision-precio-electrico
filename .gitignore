@@ -6,6 +6,8 @@ __pycache__/
 
 # Datos (se regeneran con los scripts)
 data/
+# Archivo de datos tal como estaban en cada envío: se guarda en la rama `archivo`, no en main
+archivo/
 
 # Claves: NUNCA al repositorio
 .env

@@ -135,6 +135,12 @@ def main():
         from prevision import sesgo
         sesgo.guardar_en_registro(cruda)
         print(f"Registro actualizado: {sesgo.REGISTRO.name}")
+        try:  # archivo de los datos tal como estaban (no debe afectar al envío si falla)
+            from prevision import archivo, modelo
+            ruta = archivo.guardar(entrega, modelo.ULTIMOS_DATOS)
+            print(f"Archivo de datos: {ruta.name} ({ruta.stat().st_size // 1024} KB)")
+        except Exception as e:  # noqa: BLE001
+            print(f"AVISO: no se pudo archivar los datos ({e})", file=sys.stderr)
     if avisos:
         raise SystemExit("Enviado, pero con respaldo:\n" + "\n".join(avisos))
 

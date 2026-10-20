@@ -160,13 +160,18 @@ def datos_recientes(entrega: date) -> tuple[dict, list[str]]:
     return datos, avisos
 
 
+ULTIMOS_DATOS: dict | None = None
+
+
 def predecir(entrega: date, datos: dict | None = None, registro: pd.Series | None = None):
     """Devuelve (previsión corregida, avisos, previsión sin corregir) indexadas por inicio del periodo en UTC."""
     carpeta = CARPETA_MODELOS / VERSION
     meta = json.loads((carpeta / "meta.json").read_text())
+    global ULTIMOS_DATOS
     avisos = []
     if datos is None:
         datos, avisos = datos_recientes(entrega)
+    ULTIMOS_DATOS = datos  # para archivar lo que se usó (prevision/archivo.py)
     X = construir_variables([entrega], datos)
     if X.empty:
         raise RuntimeError(f"No se pudieron construir las variables de {entrega}")

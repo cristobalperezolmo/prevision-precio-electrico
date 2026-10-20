@@ -73,6 +73,23 @@ jobs:
           git commit -q -m "Registro de previsiones ($(date -u +%Y-%m-%dT%H:%MZ))" -- registro/ || exit 0
           git reset -q --hard HEAD
           git pull --rebase -q && git push -q
+      # Datos tal como estaban en este envío → rama `archivo` (un único commit con un fichero por día)
+      - name: Guardar archivo de datos
+        if: always()
+        continue-on-error: true
+        run: |
+          [ -d archivo ] || { echo "Nada que archivar"; exit 0; }
+          rm -rf /tmp/archivo && mkdir /tmp/archivo && cd /tmp/archivo
+          git init -q -b archivo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          URL="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          if git fetch -q --depth=1 "$URL" archivo; then git checkout -q FETCH_HEAD -- . ; fi
+          mkdir -p archivo && cp "$GITHUB_WORKSPACE"/archivo/*.parquet archivo/
+          git add archivo
+          git commit -q -m "Archivo de datos ($(date -u +%Y-%m-%dT%H:%MZ)): $(ls archivo | wc -l) días"
+          git push -q --force "$URL" archivo
+          echo "Archivo: $(ls archivo | wc -l) días, $(du -sh archivo | cut -f1)"
       # Los tests van después del envío: si fallan, avisan, pero no impiden enviar
       - run: python -m pytest -q
       - name: Marcar el job como fallido si el envío falló o usó el respaldo (para recibir el email)
