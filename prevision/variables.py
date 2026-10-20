@@ -233,6 +233,8 @@ def cargar_extras2(datos: dict) -> dict:
         datos["balance"] = pd.read_parquet(CARPETA / "balance.parquet")
     datos["meteo2_modelos"] = {m: pd.read_parquet(CARPETA / f"meteo2_{m}.parquet") for m in MODELOS_METEO
                                if (CARPETA / f"meteo2_{m}.parquet").exists()}
+    if (CARPETA / "ec.parquet").exists():
+        datos["ec"] = pd.read_parquet(CARPETA / "ec.parquet")
     return datos
 
 

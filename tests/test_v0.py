@@ -104,7 +104,8 @@ def _datos_sinteticos(desde: date, dias: int) -> dict:
             "meteo_modelos": {m: meteo for m in MODELOS_METEO},
             "meteo2_modelos": {m: meteo2 for m in MODELOS_METEO},
             "mibgas": pd.Series(30.0, index=dias_idx), "co2": pd.Series(70.0, index=dias_idx),
-            "balance": pd.DataFrame({c: 1000.0 for c in BALANCE.values()}, index=dias_idx)}
+            "balance": pd.DataFrame({c: 1000.0 for c in BALANCE.values()}, index=dias_idx),
+            "ec": pd.DataFrame({"ec_solar": 5000.0, "ec_eolica": 7000.0, "ec_demanda": 27000.0}, index=horas)}
 
 
 def test_variables_dias_de_cambio_de_hora():
@@ -161,3 +162,13 @@ def test_correccion_de_sesgo():
     assert (corregida[horas != 8] == 60).all()
     # con pocos días en el registro no se corrige
     assert sesgo.aplicar(prevision, entrega, registro.iloc[:48], reales)[0].equals(prevision)
+
+
+def test_modelo_sin_demanda_prevista_usa_el_otro_juego():
+    """Si la demanda prevista de ENTSO-E para E no está publicada, se usa el juego de modelos sin ella."""
+    from prevision import modelo
+    datos = _datos_sinteticos(date(2026, 9, 20), 45)
+    datos["ec"] = datos["ec"][datos["ec"].index < periodos_utc(date(2026, 10, 22))[0]]
+    prevision, avisos, _ = modelo.predecir(date(2026, 10, 22), datos, registro=pd.Series(dtype=float))
+    assert len(validacion.preparar(date(2026, 10, 22), prevision)) == 24
+    assert avisos == []  # no es un fallo: solo se usa el otro juego

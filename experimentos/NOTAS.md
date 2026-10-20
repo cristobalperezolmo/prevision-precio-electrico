@@ -67,3 +67,17 @@ Corrección: restar k × (media exponencial de los errores pasados a esa misma h
 - extras 0,561/0,590 · reciente365 0,561/0,586 · hojas63 0,557/0,588 · tramos 0,560/0,593
 - Media de 4: ext2 0,555/0,578 → **ext4 0,548/0,580** · + 15 % LEAR: 0,541/0,573 · + corrección de sesgo: **0,531 / 0,556**
 - Se elige ext4 (mejor en 2025, igual en 2026)
+
+## Ronda 6: reentrenamiento SEMANAL, tabla ext2 sin CO2
+- extras 0,557/0,564 · reciente365 0,556/0,560 · hojas63 0,553/0,562 · tramos 0,555/0,568
+- Media de 4: **0,544 / 0,553** (mensual: 0,555 / 0,578) · + 15 % LEAR semanal: 0,538 / 0,551
+- + corrección de sesgo: **0,533 / 0,544** (producción actual: 0,563 / 0,600)
+
+## Ronda 8: previsiones oficiales ENTSO-E de España vía Energy-Charts (gratis, sin token), tabla ext5, mensual
+Disponibilidad: eólica/solar day-ahead para E se publican hacia las 18:00 de D → NO se usan (fuga).
+La demanda prevista para E debe publicarse ≤ 2 h antes del cierre de la subasta (10:00 Bruselas) → sí, en principio.
+- extras 0,538/0,568 · reciente365 0,535/0,556 · hojas63 0,532/0,561 · tramos 0,546/0,577
+- Media de 4: **0,526 / 0,555** (ext4: 0,548 / 0,580) · + LEAR + corrección: **0,515 / 0,533** (mensual)
+- Ronda 9 (sin la demanda prevista para E): 0,559/0,589 → TODA la mejora viene de la demanda prevista para E.
+- ⚠️ PENDIENTE verificar la hora real de publicación y si el valor se revisa después
+  (experimentos/vigilar_ec.py, snapshots en data/snapshots/). Hasta verificarlo, no pasar a producción.

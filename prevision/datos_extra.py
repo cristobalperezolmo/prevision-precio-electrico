@@ -113,6 +113,14 @@ def actualizar(desde: date = date(2024, 3, 1)):
     b = descargar_balance(DESDE, hoy)
     b.to_parquet(CARPETA / "balance.parquet")
     print(f"Balance: {b.shape}")
+    # Energy-Charts: se vuelven a pedir los últimos 40 días
+    ruta = CARPETA / "ec.parquet"
+    viejo = pd.read_parquet(ruta) if ruta.exists() else pd.DataFrame()
+    inicio = max(DESDE, viejo.index.max().date() - timedelta(days=40)) if len(viejo) else DESDE
+    ec = pd.concat([viejo, descargar_ec(inicio, hoy + timedelta(days=1))]).sort_index()
+    ec = ec[~ec.index.duplicated(keep="last")]
+    ec.to_parquet(ruta)
+    print(f"Energy-Charts: {ec.shape}, último {ec.dropna().index.max()}")
     for modelo in MODELOS_METEO:
         ruta = CARPETA / f"meteo2_{modelo}.parquet"
         viejo = pd.read_parquet(ruta) if ruta.exists() else pd.DataFrame()

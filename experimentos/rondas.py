@@ -45,3 +45,14 @@ r7 = {f"sem4_{k}": dict(v, frecuencia="W") for k, v in V1.items()}
 
 # Ronda 8 (tabla ext5 = ext4 + previsiones ENTSO-E sin fuga: demanda de E, eólica/solar/demanda de D), mensual
 r8 = {f"e5_{k}": v for k, v in V1.items()}
+
+# Ronda 9 (ext5): ¿de dónde sale la mejora de ENTSO-E? Sin la demanda prevista para E (horario dudoso)
+_sin_E = ("ec_demanda_E", "ec_demanda_dif")
+r9 = {
+    "e5_extras_sinE": dict(excluir=_sin_E),
+    "e5_hojas63_sinE": dict(V1["hojas63"], excluir=_sin_E),
+    "e5_reciente365_sinE": dict(V1["reciente365"], excluir=_sin_E),
+}
+
+# Ronda 10 (ext5): las 4 variantes con reentrenamiento SEMANAL
+r10 = {f"sem5_{k}": dict(v, frecuencia="W") for k, v in V1.items()}

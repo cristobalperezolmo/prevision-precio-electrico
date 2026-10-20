@@ -38,6 +38,8 @@ HUBER = {"objective": "huber", "alpha": 15}
 PESO_LEAR = 0.15
 # Variables que se descartan (no aportan en el backtest: experimentos/NOTAS.md, ronda 4)
 EXCLUIR = ("co2",)
+# Variables que dependen de la demanda prevista de ENTSO-E para E (puede no estar publicada aún)
+SOLO_CON_EC = ("ec_demanda_E", "ec_demanda_dif")
 # Configuración elegida en el backtest (ver experimentos/NOTAS.md)
 VARIANTES = {
     "extras": dict(),
@@ -60,7 +62,8 @@ def construir_variables(dias: list[date], datos: dict) -> pd.DataFrame:
     X = variables.construir(dias, datos)
     X = variables.anadir_extras(X, datos)
     X = variables.anadir_extras2(X, datos)
-    return variables.anadir_puntos(X, datos)
+    X = variables.anadir_puntos(X, datos)
+    return variables.anadir_ec(X, datos)
 
 
 def entrenar_y_guardar():
@@ -77,24 +80,28 @@ def entrenar_y_guardar():
     for viejo in list(carpeta.glob("*.txt*")) + list(carpeta.glob("*.joblib")):
         viejo.unlink()
     meta = {"desde_train": str(DESDE_TRAIN), "entrenado_hasta": str(ultimo), "filas": len(X),
-            "columnas": [c for c in variables.columnas_modelo(X) if not c.startswith(EXCLUIR)],
-            "variantes": {}, "peso_lear": PESO_LEAR}
-    for nombre, kw in VARIANTES.items():
-        kw = dict(kw)
-        segmentar = kw.pop("segmentar", None)
-        ventana = kw.pop("ventana_dias", None)
-        params = {**HUBER, "random_state": 0, **kw.pop("params", {})}
-        Xv = X[X["entrega"] >= ultimo - timedelta(days=ventana)] if ventana else X
-        segmentos = segmento(Xv, segmentar)
-        ficheros = {}
-        for g in sorted(segmentos.unique()):
-            m = entrenar(Xv[segmentos == g], params, ponderar=kw.get("ponderar"), vida_media=kw.get("vida_media"),
-                         columnas=meta["columnas"])
-            fichero = f"{nombre}__{g}.txt.gz"
-            _guardar(m.booster_, carpeta / fichero)
-            ficheros[g] = fichero
-        meta["variantes"][nombre] = {"segmentar": segmentar, "ficheros": ficheros}
-        print(f"  {nombre}: {len(ficheros)} modelo(s)")
+            "peso_lear": PESO_LEAR, "juegos": {}}
+    todas = [c for c in variables.columnas_modelo(X) if not c.startswith(EXCLUIR)]
+    # Dos juegos: con la demanda prevista de ENTSO-E para E (se publica la mañana de D) y sin ella,
+    # para los envíos en los que todavía no está publicada
+    for juego, columnas in (("con_ec", todas), ("sin_ec", [c for c in todas if not c.startswith(SOLO_CON_EC)])):
+        meta["juegos"][juego] = {"columnas": columnas, "variantes": {}}
+        for nombre, kw in VARIANTES.items():
+            kw = dict(kw)
+            segmentar = kw.pop("segmentar", None)
+            ventana = kw.pop("ventana_dias", None)
+            params = {**HUBER, "random_state": 0, **kw.pop("params", {})}
+            Xv = X[X["entrega"] >= ultimo - timedelta(days=ventana)] if ventana else X
+            segmentos = segmento(Xv, segmentar)
+            ficheros = {}
+            for g in sorted(segmentos.unique()):
+                m = entrenar(Xv[segmentos == g], params, ponderar=kw.get("ponderar"),
+                             vida_media=kw.get("vida_media"), columnas=columnas)
+                fichero = f"{juego}__{nombre}__{g}.txt.gz"
+                _guardar(m.booster_, carpeta / fichero)
+                ficheros[g] = fichero
+            meta["juegos"][juego]["variantes"][nombre] = {"segmentar": segmentar, "ficheros": ficheros}
+        print(f"  {juego}: {len(VARIANTES)} variantes, {len(columnas)} variables")
 
     F, Y = lear.matriz_diaria(X, datos["precios"])
     joblib.dump(lear.LEAR().fit(F, Y), carpeta / "lear.joblib", compress=3)
@@ -145,7 +152,8 @@ def datos_recientes(entrega: date) -> tuple[dict, list[str]]:
     for clave, nombre, funcion, args in (
             ("redata", "REData", historico.descargar_redata, (D - timedelta(days=15), D)),
             ("balance", "Balance REData", datos_extra.descargar_balance, (D - timedelta(days=15), D)),
-            ("mibgas", "MIBGAS", datos_extra.descargar_mibgas, (sorted({(D - timedelta(days=8)).year, D.year}),))):
+            ("mibgas", "MIBGAS", datos_extra.descargar_mibgas, (sorted({(D - timedelta(days=8)).year, D.year}),)),
+            ("ec", "Energy-Charts", lambda a, b: datos_extra.descargar_ec(a, b, rapido=True), (D - timedelta(days=2), entrega))):
         valor = _intentar(avisos, nombre, funcion, *args)
         if valor is not None:
             datos[clave] = valor
@@ -167,10 +175,14 @@ def predecir(entrega: date, datos: dict | None = None, registro: pd.Series | Non
     if X[met].isna().mean().mean() > 0.2:
         raise RuntimeError("Faltan demasiados datos meteorológicos")
 
-    # 1) LightGBM: media de las variantes
-    entradas = X.reindex(columns=meta["columnas"])
+    # 1) LightGBM: media de las variantes del juego que se pueda usar
+    con_ec = "ec_demanda_E" in X and X["ec_demanda_E"].notna().all()
+    juego = meta["juegos"]["con_ec" if con_ec else "sin_ec"]
+    # Que aún no esté publicada es normal en los envíos tempranos: se informa, pero no se avisa por email
+    print(f"Juego de modelos: {'con_ec' if con_ec else 'sin_ec (demanda prevista de ENTSO-E para E aún no publicada)'}")
+    entradas = X.reindex(columns=juego["columnas"])
     predicciones = []
-    for nombre, v in meta["variantes"].items():
+    for nombre, v in juego["variantes"].items():
         segmentos = segmento(X, v["segmentar"])
         p = pd.Series(np.nan, index=X.index)
         for g, fichero in v["ficheros"].items():
