@@ -58,6 +58,12 @@ class Cliente:
             return r.json()["forecasts"][0]
         raise ErrorForecastScore(f"Envío fallido tras {reintentos} intentos: {ultimo_error}")
 
+    def cancelar(self, id_prevision: str):
+        """Cancela una previsión pendiente (antes del cutoff)."""
+        r = self.sesion.delete(f"{URL_BASE}/forecasts/{id_prevision}", timeout=self.timeout,
+                               headers={"Idempotency-Key": str(uuid.uuid4())})
+        _comprobar(r)
+
 
 def _comprobar(r: requests.Response):
     if not r.ok:
