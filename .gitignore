@@ -1,0 +1,15 @@
+# Entorno virtual y temporales de Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Datos (se regeneran con los scripts)
+data/
+
+# Claves: NUNCA al repositorio
+.env
+
+# Sistema
+.DS_Store
+.claude/settings.local.json

@@ -1,0 +1,42 @@
+# Envío diario a Forecast Score.
+# Cutoff: 12:45 Bruselas = 10:45 UTC en verano / 11:45 UTC en invierno.
+# Varias ejecuciones por redundancia (los cron de GitHub pueden retrasarse o saltarse):
+#  - 17:00 UTC: envía el día de pasado mañana (ya hay datos), con un día entero de margen
+#  - 06:00, 08:00 y 09:45 UTC: reenvían el de mañana (solo puntúa la última versión)
+# Si un job falla, GitHub manda un email al dueño del repositorio.
+name: Enviar previsión
+
+on:
+  schedule:
+    - cron: "0 17 * * *"
+    - cron: "0 6 * * *"
+    - cron: "0 8 * * *"
+    - cron: "45 9 * * *"
+  workflow_dispatch:
+    inputs:
+      fecha:
+        description: "Día de entrega (YYYY-MM-DD). Vacío = próximo abierto"
+        required: false
+
+concurrency:
+  group: enviar-prevision
+  cancel-in-progress: false
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Enviar
+        env:
+          FORECASTSCORE_API_KEY: ${{ secrets.FORECASTSCORE_API_KEY }}
+          ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
+        run: python enviar_prevision.py ${{ inputs.fecha && format('--fecha {0}', inputs.fecha) || '' }}
+      # Los tests van después del envío: si fallan, avisan, pero no impiden enviar
+      - run: python -m pytest -q
