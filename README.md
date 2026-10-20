@@ -3,7 +3,7 @@
 Modelo que predice el precio horario del mercado diario español (OMIE / ENTSO-E) para el día
 siguiente y lo envía cada día a [Forecast Score](https://forecastscore.eu), que lo puntúa en un ranking público.
 
-> Estado: **v1** (LightGBM) en producción; **v0** (réplica del benchmark) como referencia y respaldo.
+> Estado: **v1** (LightGBM) en producción. El v0 (réplica del benchmark) ya no se envía: solo se usa como respaldo si el v1 falla.
 
 ## Resultados del backtest (walk-forward, ene-2025 a oct-2026)
 

@@ -40,15 +40,8 @@ jobs:
         env:
           FORECASTSCORE_API_KEY: ${{ secrets.FORECASTSCORE_API_KEY }}
         run: python enviar_prevision.py --version v1 ${{ inputs.fecha && format('--fecha {0}', inputs.fecha) || '' }}
-      # v0 (benchmark), independiente del anterior
-      - name: Enviar v0
-        id: v0
-        continue-on-error: true
-        env:
-          FORECASTSCORE_API_KEY: ${{ secrets.FORECASTSCORE_API_KEY }}
-        run: python enviar_prevision.py --version v0 ${{ inputs.fecha && format('--fecha {0}', inputs.fecha) || '' }}
       # Los tests van después del envío: si fallan, avisan, pero no impiden enviar
       - run: python -m pytest -q
-      - name: Marcar el job como fallido si algún envío falló (para recibir el email)
-        if: steps.v1.outcome == 'failure' || steps.v0.outcome == 'failure'
+      - name: Marcar el job como fallido si el envío falló o usó el respaldo (para recibir el email)
+        if: steps.v1.outcome == 'failure'
         run: exit 1
