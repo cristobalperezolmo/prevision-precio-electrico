@@ -3,7 +3,8 @@ Fuentes adicionales (en pruebas):
 
 - mibgas.parquet:  índice MIBGAS-ES (gas español) por día de entrega. El de D se fija con la
                    negociación de D-1, así que a las 10 UTC de D ya se conoce.
-- co2.parquet:     cierre diario del ETC de derechos de emisión (SparkChange, CO2.L).
+- co2.parquet:     cierre diario del ETC de derechos de emisión (SparkChange, CO2.L). Probado y
+                   descartado (no aporta); se deja la función por si se quiere volver a probar.
 - balance.parquet: saldo de intercambios internacionales y bombeo diarios (REData), en MWh.
 - meteo2_*.parquet: más puntos meteorológicos para índices eólico/solar ponderados.
 
@@ -109,9 +110,6 @@ def actualizar(desde: date = date(2024, 3, 1)):
     s = descargar_mibgas(range(DESDE.year, hoy.year + 1))
     s.to_frame().to_parquet(CARPETA / "mibgas.parquet")
     print(f"MIBGAS: {len(s)} días, último {s.index.max()} = {s.iloc[-1]:.2f}")
-    c = descargar_co2(DESDE)
-    c.to_frame().to_parquet(CARPETA / "co2.parquet")
-    print(f"CO2: {len(c)} días, último {c.index.max()} = {c.iloc[-1]:.2f}")
     b = descargar_balance(DESDE, hoy)
     b.to_parquet(CARPETA / "balance.parquet")
     print(f"Balance: {b.shape}")

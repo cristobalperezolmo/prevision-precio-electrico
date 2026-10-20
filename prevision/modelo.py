@@ -36,6 +36,8 @@ VERSION = "v1"
 DESDE_TRAIN = date(2023, 1, 8)
 HUBER = {"objective": "huber", "alpha": 15}
 PESO_LEAR = 0.15
+# Variables que se descartan (no aportan en el backtest: experimentos/NOTAS.md, ronda 4)
+EXCLUIR = ("co2",)
 # Configuración elegida en el backtest (ver experimentos/NOTAS.md)
 VARIANTES = {
     "extras": dict(),
@@ -74,7 +76,8 @@ def entrenar_y_guardar():
     for viejo in list(carpeta.glob("*.txt*")) + list(carpeta.glob("*.joblib")):
         viejo.unlink()
     meta = {"desde_train": str(DESDE_TRAIN), "entrenado_hasta": str(ultimo), "filas": len(X),
-            "columnas": variables.columnas_modelo(X), "variantes": {}, "peso_lear": PESO_LEAR}
+            "columnas": [c for c in variables.columnas_modelo(X) if not c.startswith(EXCLUIR)],
+            "variantes": {}, "peso_lear": PESO_LEAR}
     for nombre, kw in VARIANTES.items():
         kw = dict(kw)
         segmentar = kw.pop("segmentar", None)
@@ -141,8 +144,7 @@ def datos_recientes(entrega: date) -> tuple[dict, list[str]]:
     for clave, nombre, funcion, args in (
             ("redata", "REData", historico.descargar_redata, (D - timedelta(days=15), D)),
             ("balance", "Balance REData", datos_extra.descargar_balance, (D - timedelta(days=15), D)),
-            ("mibgas", "MIBGAS", datos_extra.descargar_mibgas, (sorted({(D - timedelta(days=8)).year, D.year}),)),
-            ("co2", "CO2", datos_extra.descargar_co2, (D - timedelta(days=30),))):
+            ("mibgas", "MIBGAS", datos_extra.descargar_mibgas, (sorted({(D - timedelta(days=8)).year, D.year}),))):
         valor = _intentar(avisos, nombre, funcion, *args)
         if valor is not None:
             datos[clave] = valor

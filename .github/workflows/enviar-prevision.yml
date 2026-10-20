@@ -38,6 +38,13 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
+      # Modelo más reciente (reentrenado cada semana en la rama `modelos`); si no hay, se usa el de main
+      - name: Usar el modelo más reciente
+        continue-on-error: true
+        run: |
+          git fetch -q --depth=1 origin modelos && git checkout FETCH_HEAD -- modelos/ \
+            && python -c "import json; print('Modelo entrenado hasta', json.load(open('modelos/v1/meta.json'))['entrenado_hasta'])" \
+            || (git checkout HEAD -- modelos/ && echo "Sin rama modelos: se usa el modelo de main")
       # v1 (modelo). Si falla el modelo, el propio script envía el benchmark y acaba en error (email)
       - name: Enviar v1
         id: v1
@@ -53,7 +60,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add registro/
-          git commit -m "Registro de previsiones ($(date -u +%Y-%m-%dT%H:%MZ))" || exit 0
+          # solo se sube registro/ (el modelo traído de la rama `modelos` no va a main)
+          git commit -q -m "Registro de previsiones ($(date -u +%Y-%m-%dT%H:%MZ))" -- registro/ || exit 0
+          git reset -q --hard HEAD
           git pull --rebase -q && git push -q
       # Los tests van después del envío: si fallan, avisan, pero no impiden enviar
       - run: python -m pytest -q

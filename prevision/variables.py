@@ -245,3 +245,28 @@ def anadir_perfil_D(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
     for h in range(24):
         X[f"pD_{h}"] = perfil[h].values
     return X
+
+
+def anadir_puntos(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
+    """Factor de carga eólico y radiación de cada uno de los 24 puntos (media de los modelos
+    meteorológicos), a la hora t y su media diaria de E: el modelo aprende el peso de cada zona."""
+    from prevision.datos_extra import PUNTOS_EOLICOS, PUNTOS_SOLARES
+    modelos = list(datos.get("meteo2_modelos", {}).values())
+    if not modelos:
+        return X
+    X = X.copy()
+    entrega = pd.Series(X["entrega"].values, index=X.index)
+    media = sum(m.reindex(modelos[0].index) for m in modelos) / len(modelos)
+    columnas = {}
+    for k in PUNTOS_EOLICOS:
+        v = media[f"wind_speed_100m__{k}"].clip(upper=45)
+        columnas[f"pt_eol_{k}"] = ((v - 11).clip(lower=0) / 34).pow(2).clip(upper=1)
+    for k in PUNTOS_SOLARES:
+        columnas[f"pt_sol_{k}"] = media[f"shortwave_radiation__{k}"]
+    tabla = pd.DataFrame(columnas)
+    for c in tabla.columns:
+        X[c] = tabla[c].reindex(X.index).values
+        if c.startswith("pt_eol_"):
+            diaria = tabla[c].groupby(tabla.index.tz_convert(MADRID).date).mean()
+            X[f"{c}_E"] = entrega.map(diaria).values
+    return X

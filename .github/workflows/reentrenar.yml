@@ -1,10 +1,11 @@
-# Reentrenamiento mensual del modelo v1: descarga el histórico, entrena y sube modelos/ al repo.
-# El commit mensual también evita que GitHub desactive los workflows programados por inactividad.
+# Reentrenamiento semanal del modelo v1: actualiza el histórico, entrena y publica modelos/
+# en la rama `modelos` (un único commit que se sobrescribe cada semana, para que el repo no crezca).
+# El envío diario usa el modelo de esa rama; si no existe, el de main.
 name: Reentrenar modelo
 
 on:
   schedule:
-    - cron: "0 3 1 * *"   # día 1 de cada mes, 03:00 UTC (lejos del cutoff)
+    - cron: "0 3 * * 1"   # cada lunes, 03:00 UTC (lejos del cutoff)
   workflow_dispatch:
 
 permissions:
@@ -33,10 +34,13 @@ jobs:
           restore-keys: historico-
       - run: python -m prevision.modelo entrenar
       - run: python -m pytest -q
-      - name: Subir el modelo nuevo
+      - name: Publicar el modelo en la rama modelos
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add modelos/
-          git commit -m "Reentrenamiento mensual del modelo v1 ($(date -u +%Y-%m))" || echo "Sin cambios"
-          git push
+          rm -rf /tmp/publicar && mkdir /tmp/publicar && cp -r modelos /tmp/publicar/
+          cd /tmp/publicar
+          git init -q -b modelos
+          git add modelos
+          git commit -q -m "Modelo v1 entrenado el $(date -u +%Y-%m-%d)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" modelos

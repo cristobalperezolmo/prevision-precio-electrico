@@ -33,3 +33,9 @@ r4 = {
     "r4_tramos_v730": dict(_v["tramos"], ventana_dias=730),
     "r4_reciente365_v730": dict(_v["reciente365"], ventana_dias=730),
 }
+
+# Ronda 5 (tabla ext4 = ext2 sin CO2 + factor de carga/radiación de cada punto): las 4 variantes
+r5 = {f"e4_{k}": v for k, v in V1.items()}
+
+# Ronda 6 (tabla ext2, sin CO2): las 4 variantes con reentrenamiento SEMANAL
+r6 = {f"sem_{k}": dict(v, frecuencia="W", excluir=("co2",)) for k, v in V1.items()}

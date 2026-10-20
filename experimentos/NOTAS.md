@@ -49,3 +49,16 @@ Corrección: restar k × (media exponencial de los errores pasados a esa misma h
 
 ## Red neuronal (MLP 256-128, 24 salidas, entradas de LEAR, 3 semillas, recalibración mensual)
 - Sola: 0,710 / 0,721. En la mezcla (+10 %): 0,548/0,573 → 0,547/0,570. Mejora mínima: no compensa la complejidad.
+- Objetivo = precio directo: 0,578 / 0,617 → peor
+- Más árboles con tasa menor (2000 × 0,015): 0,565 / 0,586 → casi igual
+- **Reentrenamiento semanal: 0,559 / 0,568** (y el sesgo de 2026 pasa de -1,5 a -0,4) → mejora clara
+- Semanal + corrección de sesgo: 0,556 / 0,566 (la corrección aporta menos: se solapan)
+- Semanal + 15 % LEAR semanal: 0,549 / 0,561 → con corrección: **0,544 / 0,556** (un solo LightGBM)
+
+## Ronda 4 (tabla ext2, variante "extras" = 0,567 / 0,588): qué fuente aporta (quitándola)
+- Sin MIBGAS: 0,566 / 0,599 → MIBGAS aporta en 2026 (se queda)
+- Sin CO2: 0,563 / 0,590 → neutro: **se quita** (una fuente menos que pueda fallar)
+- Sin índices eólico/solar de 24 puntos: 0,583 / 0,608 → es lo que más aporta (se queda)
+- Sin balance (intercambios/bombeo): 0,564 / 0,593 → neutro
+- Ventana de 730 días en las otras variantes: hojas63 0,570/0,586 (vs 0,565/0,587), tramos 0,572/0,598 (vs 0,566/0,598),
+  reciente365 0,570/0,583 (vs 0,567/0,583) → no aporta: se entrena con todo el histórico
