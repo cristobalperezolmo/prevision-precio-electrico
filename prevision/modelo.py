@@ -94,7 +94,8 @@ def datos_recientes(entrega: date) -> tuple[dict, list[str]]:
     for modelo in historico.MODELOS_METEO:
         try:
             datos["meteo_modelos"][modelo] = historico.descargar_meteo(D - timedelta(days=1),
-                                                                       entrega + timedelta(days=1), modelo)
+                                                                       entrega + timedelta(days=1), modelo,
+                                                                       rapido=True)
         except Exception as e:  # noqa: BLE001
             avisos.append(f"Meteo {modelo} no disponible: {e}")
     if not datos["meteo_modelos"]:

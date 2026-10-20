@@ -52,11 +52,11 @@ MODELOS_METEO = {"ecmwf_ifs025": "meteo.parquet", "gfs_seamless": "meteo_gfs.par
 URL_METEO = "https://previous-runs-api.open-meteo.com/v1/forecast"
 
 
-def _get_con_reintentos(url, params, intentos=5, espera=65):
+def _get_con_reintentos(url, params, intentos=5, espera=65, timeout=120):
     """GET que espera y reintenta si la API limita las peticiones (429) o falla el servidor."""
     for i in range(intentos):
         try:
-            r = requests.get(url, params=params, timeout=120)
+            r = requests.get(url, params=params, timeout=timeout)
             if r.status_code != 429 and r.status_code < 500:
                 r.raise_for_status()
                 return r
@@ -69,7 +69,7 @@ def _get_con_reintentos(url, params, intentos=5, espera=65):
     raise RuntimeError(f"{url} sigue fallando tras {intentos} intentos ({motivo})")
 
 
-def descargar_meteo(desde: date, hasta: date, modelo: str = MODELO_METEO) -> pd.DataFrame:
+def descargar_meteo(desde: date, hasta: date, modelo: str = MODELO_METEO, rapido: bool = False) -> pd.DataFrame:
     """Previsiones horarias (índice UTC), una columna por variable y punto: 'wind_speed_100m__zaragoza'."""
     nombres = list(PUNTOS)
     r = _get_con_reintentos(URL_METEO, params={
@@ -78,7 +78,9 @@ def descargar_meteo(desde: date, hasta: date, modelo: str = MODELO_METEO) -> pd.
         "hourly": ",".join(f"{v}_{ANTELACION}" for v in VARIABLES),
         "start_date": desde.isoformat(), "end_date": hasta.isoformat(),
         "timezone": "GMT", "models": modelo,
-    })
+    # En el envío diario (rapido=True) se reintenta poco: hay otros modelos y un respaldo,
+    # y el job no puede pasarse de tiempo antes del cutoff
+    }, **({"intentos": 3, "espera": 20, "timeout": 40} if rapido else {}))
     columnas = {}
     for nombre, bloque in zip(nombres, r.json()):
         horas = pd.to_datetime(bloque["hourly"]["time"]).tz_localize("UTC")
