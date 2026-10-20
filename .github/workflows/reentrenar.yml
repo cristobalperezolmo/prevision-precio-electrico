@@ -11,14 +11,15 @@ on:
 permissions:
   contents: write
 
+# Grupo propio: el reentrenamiento nunca debe retrasar un envío (solo escribe en la rama `modelos`)
 concurrency:
-  group: enviar-prevision   # no coincidir con un envío
+  group: reentrenar
   cancel-in-progress: false
 
 jobs:
   reentrenar:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
