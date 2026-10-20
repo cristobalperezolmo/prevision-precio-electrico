@@ -99,3 +99,17 @@ Semanal · 4 LightGBM (ext5) + 15 % LEAR · corrección de sesgo (vida media 14 
 - 2025: 0,511 · 2026: 0,521 (producción actual: 0,563 / 0,600; v1 inicial: 0,598 / 0,639)
 - A 15 minutos (forma media de 7 días): rMAE 0,527 (MAE 12,0 frente a 22,8)
 - Respaldo sin la demanda de ENTSO-E (juego sin_ec): total 0,535 (2025 0,527 / 2026 0,545)
+
+## Ronda 11: 3 semillas por variante (semanal, ext5)
+- Media de 4: 0,518/0,527 → 0,516/0,526 · sistema completo: 0,511/0,521 → 0,509/0,521 → **no compensa** (×3 tiempo y tamaño)
+
+# En producción desde el 20-oct (v1.2)
+Sistema final + envío a 15 minutos (variable ENVIAR_PT15M) + archivo diario de datos (rama `archivo`).
+
+# Ideas pendientes
+- Token e·sios (REE): previsiones eólica/solar D+1 de Red Eléctrica (probablemente la mayor mejora pendiente).
+- Token ENTSO-E: paradas programadas de centrales, capacidad de interconexión, embalses; verificar precios y horarios.
+- Precio de Francia (Energy-Charts, sin token) como variable.
+- Con 3-4 meses de `archivo`: reentrenar con las previsiones meteorológicas tal como estaban a la hora del envío.
+- "Tocar" a diario la caché de GitHub para que no caduque (reentrenamiento en 5 min en vez de 45).
+- Verificar la hora de publicación de la demanda prevista de ENTSO-E (experimentos/vigilar_ec.py).
