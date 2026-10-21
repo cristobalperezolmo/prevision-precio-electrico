@@ -113,3 +113,9 @@ Sistema final + envío a 15 minutos (variable ENVIAR_PT15M) + archivo diario de 
 - Con 3-4 meses de `archivo`: reentrenar con las previsiones meteorológicas tal como estaban a la hora del envío.
 - "Tocar" a diario la caché de GitHub para que no caduque (reentrenamiento en 5 min en vez de 45).
 - Verificar la hora de publicación de la demanda prevista de ENTSO-E (experimentos/vigilar_ec.py).
+
+# Verificaciones (21-oct)
+- Demanda prevista ENTSO-E (Energy-Charts) para el 22-oct: aparece a las 23:30 UTC del 20-oct (D-1) y se revisa
+  una vez a las 08:45 UTC del 21 (diferencia media 67 MW de ~27 GW): disponible a tiempo, sin fuga apreciable.
+- Precios ENTSO-E (A44) = OMIE exactamente (0,000 €/MWh) a 15 min desde oct-2025 y horarios antes, también en
+  días de cambio de hora. Ojo: el A44 incluye las subastas intradía (contrato A07): hay que quedarse con A01.
