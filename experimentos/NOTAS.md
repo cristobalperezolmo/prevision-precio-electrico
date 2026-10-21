@@ -119,3 +119,10 @@ Sistema final + envío a 15 minutos (variable ENVIAR_PT15M) + archivo diario de 
   una vez a las 08:45 UTC del 21 (diferencia media 67 MW de ~27 GW): disponible a tiempo, sin fuga apreciable.
 - Precios ENTSO-E (A44) = OMIE exactamente (0,000 €/MWh) a 15 min desde oct-2025 y horarios antes, también en
   días de cambio de hora. Ojo: el A44 incluye las subastas intradía (contrato A07): hay que quedarse con A01.
+
+## Token ENTSO-E (21-oct): ronda 12 (ext6) y ronda 13 (ext7), mensual, frente a ext5 (0,526 / 0,555)
+- Precios FR/PT de D, capacidades de interconexión (E y D) y embalses: 0,523 / 0,554 → no compensa
+- Paradas de centrales (A80, programadas y averías, solo avisos publicados antes de las 09:30 UTC de D,
+  máximo por unidad): 0,527 / 0,556 → nada. El precio de D ya recoge las paradas en curso y los cambios
+  grandes D→E son raros (nuclear > 0,5 GW: 53 de 1383 días).
+- El token queda para verificaciones (precios) y como posible respaldo de la demanda prevista.

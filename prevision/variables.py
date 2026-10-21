@@ -297,3 +297,39 @@ def anadir_ec(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
     for col in ("ec_eolica", "ec_solar", "ec_demanda"):
         X[f"{col}_D_dia"] = D.map(diaria[col]).values
     return X
+
+
+def anadir_entsoe(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
+    """Variables de ENTSO-E (token): precios de Francia y Portugal de D, capacidades de interconexión
+    (prevista para E y la de D) y embalses (dato con ≥ 7 días de antigüedad, por el retraso de publicación)."""
+    X = X.copy()
+    entrega = pd.Series(X["entrega"].values, index=X.index)
+    antes = X.index - pd.Timedelta(days=1)
+    if "entsoe_horario" in datos:
+        h = datos["entsoe_horario"]
+        for zona in ("fr", "pt"):
+            col = f"precio_{zona}"
+            if col in h:
+                X[f"{zona}_D_h"] = h[col].reindex(antes).values
+                diaria = h[col].groupby(h.index.tz_convert(MADRID).date).mean()
+                X[f"{zona}_D_media"] = (entrega - timedelta(days=1)).map(diaria).values
+                X[f"{zona}_dif_D_h"] = X["p_D_h"] - X[f"{zona}_D_h"]
+        for col in ("cap_fr_es", "cap_es_fr", "cap_pt_es", "cap_es_pt"):
+            if col in h:
+                X[f"{col}_E"] = h[col].reindex(X.index).values
+                X[f"{col}_D"] = h[col].reindex(antes).values
+    if "entsoe_embalses" in datos:
+        emb = datos["entsoe_embalses"].sort_index()
+        fechas = emb.index.tz_convert(MADRID).date if emb.index.tz is not None else emb.index.date
+        tabla = pd.Series(emb.values / 1e6, index=pd.Index(fechas))  # TWh
+        limite = (entrega - timedelta(days=8)).values
+        pos = pd.Index(tabla.index).searchsorted(limite, side="right") - 1
+        X["embalses"] = [tabla.iloc[p] if p >= 0 else np.nan for p in pos]
+    return X
+
+
+GRUPOS_CENTRAL = {"B14": "nuclear", "B04": "gas", "B05": "carbon", "B10": "hidraulica", "B11": "hidraulica",
+                  "B12": "hidraulica"}
+
+GRUPOS_CENTRAL = {"B14": "nuclear", "B04": "gas", "B05": "carbon", "B10": "hidraulica", "B11": "hidraulica",
+                  "B12": "hidraulica"}
