@@ -99,3 +99,17 @@ Semanal · 4 LightGBM (ext5) + 15 % LEAR · corrección de sesgo (vida media 14 
 - 2025: 0,511 · 2026: 0,521 (producción actual: 0,563 / 0,600; v1 inicial: 0,598 / 0,639)
 - A 15 minutos (forma media de 7 días): rMAE 0,527 (MAE 12,0 frente a 22,8)
 - Respaldo sin la demanda de ENTSO-E (juego sin_ec): total 0,535 (2025 0,527 / 2026 0,545)
+
+## Ronda 14 (22-oct-2026): previsiones D+1 de Red Eléctrica (e·sios)
+Indicadores 1777 (eólica), 1779 (FV) y 1775 (demanda) D+1, publicados hacia las 09:00 UTC de D
+(comprobado: 08:53–08:59 UTC). Variables para E y D, cambio, medias diarias y demanda residual (ext8 = ext5 + e·sios).
+Reentrenamiento mensual, media de las 4 variantes:
+
+| | 2025 | 2026 |
+|---|---|---|
+| ext5 (v1.2) | 0,526 | 0,555 |
+| ext8 (+ e·sios) | **0,461** | **0,497** |
+
+P90 25,7/28,2 → 22,6/25,7. Adoptado en producción como v1.3 (juego `esios`, con el v1.2 de respaldo y como
+sombra en registro/sombra.csv). Pendiente: confirmar que REE no revisa estas previsiones a posteriori
+(foto del 22-oct 09:16 UTC en el scratchpad) y comparar v1.3 con la sombra con precios reales.

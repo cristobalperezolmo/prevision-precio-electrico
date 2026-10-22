@@ -59,3 +59,12 @@ r10 = {f"sem5_{k}": dict(v, frecuencia="W") for k, v in V1.items()}
 
 # Ronda 11 (ext5, semanal): 3 semillas por variante
 r11 = {f"sem5s3_{k}": dict(v, frecuencia="W", semillas=(0, 1, 2)) for k, v in V1.items()}
+
+# Ronda 12 (ext6 = ext5 + ENTSO-E: precios FR/PT de D, capacidades, embalses), mensual (comparar con r8)
+r12 = {f"e6_{k}": v for k, v in V1.items()}
+
+# Ronda 13 (ext7 = ext5 + paradas de centrales ENTSO-E publicadas antes de las 09:30 UTC de D), mensual
+r13 = {f"e7_{k}": v for k, v in V1.items()}
+
+# Ronda 14 (ext8 = ext5 + previsiones D+1 de Red Eléctrica, e·sios), mensual (comparar con r8: 0,526 / 0,555)
+r14 = {f"e8_{k}": v for k, v in V1.items()}

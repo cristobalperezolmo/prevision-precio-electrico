@@ -297,3 +297,92 @@ def anadir_ec(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
     for col in ("ec_eolica", "ec_solar", "ec_demanda"):
         X[f"{col}_D_dia"] = D.map(diaria[col]).values
     return X
+
+
+def anadir_entsoe(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
+    """Variables de ENTSO-E (token): precios de Francia y Portugal de D, capacidades de interconexión
+    (prevista para E y la de D) y embalses (dato con ≥ 7 días de antigüedad, por el retraso de publicación)."""
+    X = X.copy()
+    entrega = pd.Series(X["entrega"].values, index=X.index)
+    antes = X.index - pd.Timedelta(days=1)
+    if "entsoe_horario" in datos:
+        h = datos["entsoe_horario"]
+        for zona in ("fr", "pt"):
+            col = f"precio_{zona}"
+            if col in h:
+                X[f"{zona}_D_h"] = h[col].reindex(antes).values
+                diaria = h[col].groupby(h.index.tz_convert(MADRID).date).mean()
+                X[f"{zona}_D_media"] = (entrega - timedelta(days=1)).map(diaria).values
+                X[f"{zona}_dif_D_h"] = X["p_D_h"] - X[f"{zona}_D_h"]
+        for col in ("cap_fr_es", "cap_es_fr", "cap_pt_es", "cap_es_pt"):
+            if col in h:
+                X[f"{col}_E"] = h[col].reindex(X.index).values
+                X[f"{col}_D"] = h[col].reindex(antes).values
+    if "entsoe_embalses" in datos:
+        emb = datos["entsoe_embalses"].sort_index()
+        fechas = emb.index.tz_convert(MADRID).date if emb.index.tz is not None else emb.index.date
+        tabla = pd.Series(emb.values / 1e6, index=pd.Index(fechas))  # TWh
+        limite = (entrega - timedelta(days=8)).values
+        pos = pd.Index(tabla.index).searchsorted(limite, side="right") - 1
+        X["embalses"] = [tabla.iloc[p] if p >= 0 else np.nan for p in pos]
+    return X
+
+
+GRUPOS_CENTRAL = {"B14": "nuclear", "B04": "gas", "B05": "carbon", "B10": "hidraulica", "B11": "hidraulica",
+                  "B12": "hidraulica"}
+
+
+def anadir_paradas(X: pd.DataFrame, datos: dict, corte_utc: str = "09:30") -> pd.DataFrame:
+    """MW indisponibles por tipo de central para cada hora de E y de D, contando solo los avisos de ENTSO-E
+    (paradas programadas y averías) publicados antes de las `corte_utc` del día D. Si una unidad tiene varios
+    avisos solapados se toma la mayor indisponibilidad (no se suman)."""
+    if "paradas" not in datos:
+        return X
+    p = datos["paradas"].copy()
+    p = p[~p["estado"].isin(["A09", "A13"])]  # avisos cancelados o retirados
+    p["no_disp"] = (p["nominal"] - p["disponible"]).clip(lower=0)
+    p["grupo"] = p["psr"].map(GRUPOS_CENTRAL).fillna("otras")
+    p = p[p["no_disp"] > 0]
+    creado, ini, fin = p["creado"].values, p["inicio"].values, p["fin"].values
+    X = X.copy()
+    grupos = ["nuclear", "gas", "carbon", "hidraulica", "otras"]
+    res = {g: np.full(len(X), np.nan) for g in grupos}
+    res_D = {g: np.full(len(X), np.nan) for g in grupos}
+    for E, filas in pd.Series(np.arange(len(X)), index=X["entrega"].values).groupby(level=0):
+        corte = np.datetime64(pd.Timestamp(f"{E - timedelta(days=1)} {corte_utc}", tz="UTC").tz_convert(None))
+        visibles = p[creado < corte]
+        if visibles.empty:
+            continue
+        horas = X.index[filas.values]
+        for destino, desfase in ((res, pd.Timedelta(0)), (res_D, pd.Timedelta(days=1))):
+            for k, t in zip(filas.values, horas - desfase):
+                t64 = np.datetime64(t.tz_convert(None))
+                activos = visibles[(visibles["inicio"].values <= t64) & (visibles["fin"].values > t64)]
+                por_unidad = activos.groupby(["grupo", "unidad"])["no_disp"].max().groupby(level=0).sum()
+                for g in grupos:
+                    destino[g][k] = por_unidad.get(g, 0.0) / 1000  # GW
+    for g in grupos:
+        X[f"par_{g}_E"] = res[g]
+        X[f"par_{g}_D"] = res_D[g]
+        X[f"par_{g}_dif"] = X[f"par_{g}_E"] - X[f"par_{g}_D"]
+    return X
+
+
+def anadir_esios(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
+    """Previsiones D+1 de Red Eléctrica (e·sios), publicadas hacia las 09:00 UTC de D: eólica, fotovoltaica
+    y demanda para cada hora de E, la demanda residual (demanda − eólica − FV), lo mismo para D y el cambio."""
+    if "esios" not in datos:
+        return X
+    X = X.copy()
+    e = datos["esios"] / 1000  # GW
+    e = e.assign(esios_residual=e["esios_demanda"] - e["esios_eolica"] - e["esios_fv"])
+    entrega = pd.Series(X["entrega"].values, index=X.index)
+    antes = X.index - pd.Timedelta(days=1)
+    diaria = e.groupby(e.index.tz_convert(MADRID).date).mean()
+    for col in e.columns:
+        X[f"{col}_E"] = e[col].reindex(X.index).values
+        X[f"{col}_D"] = e[col].reindex(antes).values
+        X[f"{col}_dif"] = X[f"{col}_E"] - X[f"{col}_D"]
+        X[f"{col}_E_dia"] = entrega.map(diaria[col]).values
+        X[f"{col}_dd"] = X[f"{col}_E_dia"] - (entrega - timedelta(days=1)).map(diaria[col]).values
+    return X
