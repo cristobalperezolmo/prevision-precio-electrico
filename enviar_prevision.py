@@ -135,6 +135,10 @@ def main():
         from prevision import sesgo
         sesgo.guardar_en_registro(cruda)
         print(f"Registro actualizado: {sesgo.REGISTRO.name}")
+        from prevision import modelo
+        if modelo.ULTIMA_SOMBRA is not None:  # v1.2 sin e·sios, para comparar (no se envía)
+            sesgo.guardar_en_registro(modelo.ULTIMA_SOMBRA, sesgo.REGISTRO.parent / "sombra.csv")
+            print("Registro de la sombra (v1.2 sin e·sios) actualizado: sombra.csv")
         try:  # archivo de los datos tal como estaban (no debe afectar al envío si falla)
             from prevision import archivo, modelo
             ruta = archivo.guardar(entrega, modelo.ULTIMOS_DATOS)

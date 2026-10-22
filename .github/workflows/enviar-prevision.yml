@@ -3,7 +3,8 @@
 # Varias ejecuciones por redundancia: los cron de GitHub pueden retrasarse horas (hemos visto 3 h)
 # o saltarse, sobre todo a en punto, así que se usan minutos poco habituales:
 #  - 17:17 UTC: envía el día de pasado mañana (ya hay datos), con un día entero de margen
-#  - 04:23, 06:43, 08:13 y 09:37 UTC: reenvían el de mañana (solo puntúa la última versión)
+#  - 04:23, 06:43, 08:13 y 09:37 UTC: reenvían el de mañana (solo puntúa la última versión).
+#    La de 09:37 es la primera con las previsiones D+1 de Red Eléctrica (salen hacia las 09:00 UTC)
 # Si un job falla, GitHub manda un email al dueño del repositorio.
 name: Enviar previsión
 
@@ -51,6 +52,7 @@ jobs:
         continue-on-error: true
         env:
           FORECASTSCORE_API_KEY: ${{ secrets.FORECASTSCORE_API_KEY }}
+          ESIOS_API_KEY: ${{ secrets.ESIOS_API_KEY }}
         run: python enviar_prevision.py --version v1 ${{ inputs.fecha && format('--fecha {0}', inputs.fecha) || '' }}
       # Previsión a 15 minutos (ranking PT15M). Desactivada salvo que la variable del repositorio
       # ENVIAR_PT15M valga "true" (Settings → Secrets and variables → Actions → Variables)
@@ -60,6 +62,7 @@ jobs:
         continue-on-error: true
         env:
           FORECASTSCORE_API_KEY: ${{ secrets.FORECASTSCORE_API_KEY }}
+          ESIOS_API_KEY: ${{ secrets.ESIOS_API_KEY }}
         run: python enviar_prevision.py --version v1 --resolucion PT15M ${{ inputs.fecha && format('--fecha {0}', inputs.fecha) || '' }}
       # Guarda la previsión sin corregir en registro/ (la usa la corrección de sesgo de los días siguientes)
       - name: Guardar registro

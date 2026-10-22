@@ -29,7 +29,7 @@ def _largo(df: pd.DataFrame, fuente: str, desde, hasta) -> pd.DataFrame:
 
 
 def guardar(entrega: date, datos: dict, momento: datetime | None = None) -> Path:
-    """Guarda las previsiones (meteo de cada modelo y ENTSO-E) para las horas de D y de E."""
+    """Guarda las previsiones (meteo de cada modelo, ENTSO-E y e·sios) para las horas de D y de E."""
     momento = momento or datetime.now(timezone.utc)
     desde = periodos_utc(entrega - timedelta(days=1))[0]
     hasta = periodos_utc(entrega)[-1] + pd.Timedelta(hours=1)
@@ -39,6 +39,8 @@ def guardar(entrega: date, datos: dict, momento: datetime | None = None) -> Path
             trozos.append(_largo(df, f"{clave.split('_')[0]}:{modelo}", desde, hasta))
     if "ec" in datos:
         trozos.append(_largo(datos["ec"], "energy-charts", desde, hasta))
+    if "esios" in datos:
+        trozos.append(_largo(datos["esios"], "esios", desde, hasta))
     for nombre in ("gas", "mibgas"):
         serie = datos.get(nombre)
         if serie is not None and len(serie):

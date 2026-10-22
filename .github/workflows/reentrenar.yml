@@ -34,6 +34,8 @@ jobs:
           key: historico-${{ github.run_id }}
           restore-keys: historico-
       - run: python -m prevision.modelo entrenar
+        env:
+          ESIOS_API_KEY: ${{ secrets.ESIOS_API_KEY }}
       - run: python -m pytest -q
       - name: Publicar el modelo en la rama modelos
         run: |

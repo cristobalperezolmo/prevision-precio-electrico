@@ -105,7 +105,9 @@ def _datos_sinteticos(desde: date, dias: int) -> dict:
             "meteo2_modelos": {m: meteo2 for m in MODELOS_METEO},
             "mibgas": pd.Series(30.0, index=dias_idx), "co2": pd.Series(70.0, index=dias_idx),
             "balance": pd.DataFrame({c: 1000.0 for c in BALANCE.values()}, index=dias_idx),
-            "ec": pd.DataFrame({"ec_solar": 5000.0, "ec_eolica": 7000.0, "ec_demanda": 27000.0}, index=horas)}
+            "ec": pd.DataFrame({"ec_solar": 5000.0, "ec_eolica": 7000.0, "ec_demanda": 27000.0}, index=horas),
+            "esios": pd.DataFrame({"esios_eolica": 7000.0, "esios_fv": 5000.0, "esios_demanda": 27000.0},
+                                  index=horas)}
 
 
 def test_variables_dias_de_cambio_de_hora():
@@ -172,6 +174,22 @@ def test_modelo_sin_demanda_prevista_usa_el_otro_juego():
     prevision, avisos, _ = modelo.predecir(date(2026, 10, 22), datos, registro=pd.Series(dtype=float))
     assert len(validacion.preparar(date(2026, 10, 22), prevision)) == 24
     assert avisos == []  # no es un fallo: solo se usa el otro juego
+    assert modelo.ULTIMA_SOMBRA is None
+
+
+def test_modelo_con_y_sin_esios():
+    """Con las previsiones de e·sios para E se usa su juego y se calcula la sombra (v1.2);
+    si aún no están publicadas, se usa el v1.2 sin avisar."""
+    from prevision import modelo
+    entrega = date(2026, 10, 22)
+    datos = _datos_sinteticos(date(2026, 9, 20), 45)
+    prevision, avisos, cruda = modelo.predecir(entrega, datos, registro=pd.Series(dtype=float))
+    assert avisos == [] and modelo.ULTIMA_SOMBRA is not None
+    assert modelo.ULTIMA_SOMBRA.index.equals(cruda.index) and modelo.ULTIMA_SOMBRA.notna().all()
+    datos["esios"] = datos["esios"][datos["esios"].index < periodos_utc(entrega)[0]]
+    prevision2, avisos, _ = modelo.predecir(entrega, datos, registro=pd.Series(dtype=float))
+    assert avisos == [] and modelo.ULTIMA_SOMBRA is None
+    assert len(validacion.preparar(entrega, prevision2)) == 24
 
 
 def test_archivo_de_datos(tmp_path, monkeypatch):
@@ -181,7 +199,7 @@ def test_archivo_de_datos(tmp_path, monkeypatch):
     datos = _datos_sinteticos(date(2026, 9, 20), 45)
     ruta = archivo.guardar(date(2026, 10, 25), datos)
     t = pd.read_parquet(ruta)
-    assert set(t["fuente"]) >= {"meteo:ecmwf_ifs025", "meteo2:icon_seamless", "energy-charts", "gas", "mibgas"}
+    assert set(t["fuente"]) >= {"meteo:ecmwf_ifs025", "meteo2:icon_seamless", "energy-charts", "esios", "gas", "mibgas"}
     horas = t.loc[t["fuente"] == "energy-charts", "instante"].nunique()
     assert horas == 24 + 25  # D (24 h) y E (25 h, cambio de hora)
     assert t["guardado_utc"].notna().all()

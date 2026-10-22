@@ -11,6 +11,14 @@ El v1 (versión 1.2) combina:
   - 15 %: LEAR (un Lasso por hora, modelo lineal de referencia en la literatura)
   - y se le resta el 70 % del error reciente a cada hora (prevision/sesgo.py).
 
+Juegos de modelos (versión 1.3), del mejor al de respaldo, según qué datos haya a la hora del envío:
+  esios:  con las previsiones D+1 de Red Eléctrica (publicadas hacia las 09:00 UTC de D) y la demanda
+          prevista de ENTSO-E (experimentos/NOTAS.md, ronda 14)
+  con_ec: sin e·sios, con la demanda prevista de ENTSO-E (el v1.2)
+  sin_ec: sin ninguna de las dos
+Cuando se usa el juego esios, se calcula también la previsión del v1.2 (con_ec/sin_ec) y se guarda aparte
+(registro/sombra.csv) para comparar los dos con los precios reales.
+
 Entrenar (mensual):  python -m prevision.modelo entrenar
 Predecir (prueba):   python -m prevision.modelo predecir --fecha 2026-10-22
 """
@@ -27,7 +35,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
-from prevision import datos_extra, historico, lear, sesgo, variables
+from prevision import datos_extra, esios, historico, lear, sesgo, variables
 from prevision.backtest import anadir_escala, entrenar, segmento
 from prevision.calendario import MADRID, periodos_utc
 
@@ -40,6 +48,8 @@ PESO_LEAR = 0.15
 EXCLUIR = ("co2",)
 # Variables que dependen de la demanda prevista de ENTSO-E para E (puede no estar publicada aún)
 SOLO_CON_EC = ("ec_demanda_E", "ec_demanda_dif")
+# Variables de las previsiones D+1 de Red Eléctrica (e·sios)
+SOLO_CON_ESIOS = ("esios_",)
 # Configuración elegida en el backtest (ver experimentos/NOTAS.md)
 VARIANTES = {
     "extras": dict(),
@@ -63,12 +73,17 @@ def construir_variables(dias: list[date], datos: dict) -> pd.DataFrame:
     X = variables.anadir_extras(X, datos)
     X = variables.anadir_extras2(X, datos)
     X = variables.anadir_puntos(X, datos)
-    return variables.anadir_ec(X, datos)
+    X = variables.anadir_ec(X, datos)
+    return variables.anadir_esios(X, datos)
 
 
 def entrenar_y_guardar():
     historico.actualizar()
     datos_extra.actualizar()
+    try:
+        esios.actualizar(historico.CARPETA)
+    except Exception as e:  # noqa: BLE001 - se entrena con el histórico de e·sios que haya en caché
+        print(f"AVISO: no se pudo actualizar e·sios ({e})", file=sys.stderr)
     datos = variables.cargar_extras2(variables.cargar())
     ultimo = max(datos["precios"].index.tz_convert(MADRID).date)
     dias = [DESDE_TRAIN + timedelta(days=i) for i in range((ultimo - DESDE_TRAIN).days + 1)]
@@ -82,9 +97,15 @@ def entrenar_y_guardar():
     meta = {"desde_train": str(DESDE_TRAIN), "entrenado_hasta": str(ultimo), "filas": len(X),
             "peso_lear": PESO_LEAR, "juegos": {}}
     todas = [c for c in variables.columnas_modelo(X) if not c.startswith(EXCLUIR)]
-    # Dos juegos: con la demanda prevista de ENTSO-E para E (se publica la mañana de D) y sin ella,
-    # para los envíos en los que todavía no está publicada
-    for juego, columnas in (("con_ec", todas), ("sin_ec", [c for c in todas if not c.startswith(SOLO_CON_EC)])):
+    sin_esios = [c for c in todas if not c.startswith(SOLO_CON_ESIOS)]
+    # Tres juegos: con e·sios (y ENTSO-E), solo con la demanda prevista de ENTSO-E para E (se publica
+    # la noche anterior) y sin ninguna, para los envíos en los que todavía no están publicadas
+    juegos = [("con_ec", sin_esios), ("sin_ec", [c for c in sin_esios if not c.startswith(SOLO_CON_EC)])]
+    if len(sin_esios) < len(todas):
+        juegos.insert(0, ("esios", todas))
+    else:
+        print("AVISO: sin histórico de e·sios; no se entrena el juego esios", file=sys.stderr)
+    for juego, columnas in juegos:
         meta["juegos"][juego] = {"columnas": columnas, "variantes": {}}
         for nombre, kw in VARIANTES.items():
             kw = dict(kw)
@@ -101,7 +122,7 @@ def entrenar_y_guardar():
                 _guardar(m.booster_, carpeta / fichero)
                 ficheros[g] = fichero
             meta["juegos"][juego]["variantes"][nombre] = {"segmentar": segmentar, "ficheros": ficheros}
-        print(f"  {juego}: {len(VARIANTES)} variantes, {len(columnas)} variables")
+        print(f"  {juego}: {len(VARIANTES)} variantes, {len(columnas)} variables", flush=True)
 
     F, Y = lear.matriz_diaria(X, datos["precios"])
     joblib.dump(lear.LEAR().fit(F, Y), carpeta / "lear.joblib", compress=3)
@@ -153,7 +174,8 @@ def datos_recientes(entrega: date) -> tuple[dict, list[str]]:
             ("redata", "REData", historico.descargar_redata, (D - timedelta(days=15), D)),
             ("balance", "Balance REData", datos_extra.descargar_balance, (D - timedelta(days=15), D)),
             ("mibgas", "MIBGAS", datos_extra.descargar_mibgas, (sorted({(D - timedelta(days=8)).year, D.year}),)),
-            ("ec", "Energy-Charts", lambda a, b: datos_extra.descargar_ec(a, b, rapido=True), (D - timedelta(days=2), entrega))):
+            ("ec", "Energy-Charts", lambda a, b: datos_extra.descargar_ec(a, b, rapido=True), (D - timedelta(days=2), entrega)),
+            ("esios", "e·sios", esios.previsiones, (D - timedelta(days=2), entrega))):
         valor = _intentar(avisos, nombre, funcion, *args)
         if valor is not None:
             datos[clave] = valor
@@ -161,13 +183,34 @@ def datos_recientes(entrega: date) -> tuple[dict, list[str]]:
 
 
 ULTIMOS_DATOS: dict | None = None
+ULTIMA_SOMBRA: pd.Series | None = None  # previsión del v1.2 (sin e·sios) sin corregir, para comparar
+
+
+def _completo(X: pd.DataFrame, columna: str) -> bool:
+    return columna in X and X[columna].notna().all()
+
+
+def _lightgbm(juego: dict, X: pd.DataFrame, carpeta: Path) -> pd.Series:
+    """Media de las variantes de un juego, ya sumada al precio de D (€/MWh)."""
+    entradas = X.reindex(columns=juego["columnas"])
+    predicciones = []
+    for v in juego["variantes"].values():
+        segmentos = segmento(X, v["segmentar"])
+        p = pd.Series(np.nan, index=X.index)
+        for g, fichero in v["ficheros"].items():
+            filas = segmentos == g
+            if filas.any():
+                p[filas] = _cargar(carpeta / fichero).predict(entradas[filas])
+        predicciones.append(p)
+    return pd.concat(predicciones, axis=1).mean(axis=1) + X["p_D_h"].fillna(X["p_D_media"])
 
 
 def predecir(entrega: date, datos: dict | None = None, registro: pd.Series | None = None):
     """Devuelve (previsión corregida, avisos, previsión sin corregir) indexadas por inicio del periodo en UTC."""
     carpeta = CARPETA_MODELOS / VERSION
     meta = json.loads((carpeta / "meta.json").read_text())
-    global ULTIMOS_DATOS
+    global ULTIMOS_DATOS, ULTIMA_SOMBRA
+    ULTIMA_SOMBRA = None
     avisos = []
     if datos is None:
         datos, avisos = datos_recientes(entrega)
@@ -180,22 +223,19 @@ def predecir(entrega: date, datos: dict | None = None, registro: pd.Series | Non
     if X[met].isna().mean().mean() > 0.2:
         raise RuntimeError("Faltan demasiados datos meteorológicos")
 
-    # 1) LightGBM: media de las variantes del juego que se pueda usar
-    con_ec = "ec_demanda_E" in X and X["ec_demanda_E"].notna().all()
-    juego = meta["juegos"]["con_ec" if con_ec else "sin_ec"]
-    # Que aún no esté publicada es normal en los envíos tempranos: se informa, pero no se avisa por email
-    print(f"Juego de modelos: {'con_ec' if con_ec else 'sin_ec (demanda prevista de ENTSO-E para E aún no publicada)'}")
-    entradas = X.reindex(columns=juego["columnas"])
-    predicciones = []
-    for nombre, v in juego["variantes"].items():
-        segmentos = segmento(X, v["segmentar"])
-        p = pd.Series(np.nan, index=X.index)
-        for g, fichero in v["ficheros"].items():
-            filas = segmentos == g
-            if filas.any():
-                p[filas] = _cargar(carpeta / fichero).predict(entradas[filas])
-        predicciones.append(p)
-    pred = pd.concat(predicciones, axis=1).mean(axis=1) + X["p_D_h"].fillna(X["p_D_media"])
+    # 1) LightGBM: media de las variantes del mejor juego que se pueda usar
+    con_ec = _completo(X, "ec_demanda_E")
+    respaldo = "con_ec" if con_ec else "sin_ec"
+    # e·sios solo junto con la demanda de ENTSO-E (así se entrenó); si falta, el juego anterior (v1.2)
+    con_esios = con_ec and "esios" in meta["juegos"] and all(
+        _completo(X, f"esios_{c}_E") for c in ("eolica", "fv", "demanda"))
+    nombre = "esios" if con_esios else respaldo
+    # Que aún no estén publicadas es normal en los envíos tempranos: se informa, pero no se avisa por email
+    motivo = {"esios": "", "con_ec": " (previsiones de e·sios para E no disponibles)",
+              "sin_ec": " (ni e·sios ni demanda prevista de ENTSO-E para E disponibles)"}[nombre]
+    print(f"Juego de modelos: {nombre}{motivo}")
+    pred = _lightgbm(meta["juegos"][nombre], X, carpeta)
+    sombra = _lightgbm(meta["juegos"][respaldo], X, carpeta) if con_esios else None
 
     # 2) LEAR (si falla, se sigue solo con LightGBM)
     if meta.get("peso_lear") and (carpeta / "lear.joblib").exists():
@@ -206,11 +246,15 @@ def predecir(entrega: date, datos: dict | None = None, registro: pd.Series | Non
                                                  index=F.index, columns=range(24)), X)
             if p_lear.notna().all():
                 pred = (1 - meta["peso_lear"]) * pred + meta["peso_lear"] * p_lear
+                if sombra is not None:
+                    sombra = (1 - meta["peso_lear"]) * sombra + meta["peso_lear"] * p_lear
             else:
                 avisos.append("LEAR dio valores vacíos; se usa solo LightGBM")
         except Exception as e:  # noqa: BLE001
             avisos.append(f"LEAR falló ({e}); se usa solo LightGBM")
     cruda = pred.reindex(periodos_utc(entrega))
+    if sombra is not None and sombra.notna().all():
+        ULTIMA_SOMBRA = sombra.reindex(periodos_utc(entrega))
 
     # 3) Corrección del sesgo reciente con el registro de previsiones pasadas
     registro = sesgo.leer_registro() if registro is None else registro
