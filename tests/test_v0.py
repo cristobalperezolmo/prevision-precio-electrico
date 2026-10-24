@@ -106,8 +106,11 @@ def _datos_sinteticos(desde: date, dias: int) -> dict:
             "mibgas": pd.Series(30.0, index=dias_idx), "co2": pd.Series(70.0, index=dias_idx),
             "balance": pd.DataFrame({c: 1000.0 for c in BALANCE.values()}, index=dias_idx),
             "ec": pd.DataFrame({"ec_solar": 5000.0, "ec_eolica": 7000.0, "ec_demanda": 27000.0}, index=horas),
-            "esios": pd.DataFrame({"esios_eolica": 7000.0, "esios_fv": 5000.0, "esios_demanda": 27000.0},
-                                  index=horas)}
+            "esios": pd.DataFrame({"esios_eolica": 7000.0 + 3000 * np.sin(np.arange(len(horas)) / 17),
+                                   "esios_fv": 5000.0, "esios_demanda": 27000.0}, index=horas),
+            "omip": pd.DataFrame([{"sesion": s, "contrato": f"FTB D {s + timedelta(days=k)}", "tipo": "D",
+                                   "inicio": s + timedelta(days=k), "ref": 55.0, "ref_anterior": 54.0}
+                                  for s in dias_idx for k in (1, 2, 3)])}
 
 
 def test_variables_dias_de_cambio_de_hora():
@@ -177,14 +180,18 @@ def test_modelo_sin_demanda_prevista_usa_el_otro_juego():
     assert modelo.ULTIMA_SOMBRA is None
 
 
-def test_modelo_con_y_sin_esios():
-    """Con las previsiones de e·sios para E se usa su juego y se calcula la sombra (v1.2);
-    si aún no están publicadas, se usa el v1.2 sin avisar."""
+def test_modelo_con_y_sin_esios(capsys):
+    """Con e·sios y OMIP se usa el juego completo; sin OMIP, el de e·sios; con cualquiera de los dos
+    se calcula la sombra (v1.2). Si e·sios aún no ha publicado E, se usa el v1.2 sin avisar."""
     from prevision import modelo
     entrega = date(2026, 10, 22)
     datos = _datos_sinteticos(date(2026, 9, 20), 45)
     prevision, avisos, cruda = modelo.predecir(entrega, datos, registro=pd.Series(dtype=float))
     assert avisos == [] and modelo.ULTIMA_SOMBRA is not None
+    assert "Juego de modelos: completo" in capsys.readouterr().out
+    sin_omip = {k: v for k, v in datos.items() if k != "omip"}
+    _, avisos, _ = modelo.predecir(entrega, sin_omip, registro=pd.Series(dtype=float))
+    assert avisos == [] and "Juego de modelos: esios" in capsys.readouterr().out
     assert modelo.ULTIMA_SOMBRA.index.equals(cruda.index) and modelo.ULTIMA_SOMBRA.notna().all()
     datos["esios"] = datos["esios"][datos["esios"].index < periodos_utc(entrega)[0]]
     prevision2, avisos, _ = modelo.predecir(entrega, datos, registro=pd.Series(dtype=float))
