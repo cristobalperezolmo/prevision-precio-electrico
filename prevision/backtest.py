@@ -70,6 +70,11 @@ def referencia(X: pd.DataFrame, objetivo: str) -> np.ndarray:
         return X["p_D_h"].fillna(X["p_D_media"]).values
     if objetivo == "diferencia_ref":
         return X["p_ref_h"].fillna(X["p_D_h"]).fillna(X["p_D_media"]).values
+    if objetivo == "diferencia_curva":  # respecto a la curva de oferta reciente (variables.anadir_curva)
+        return X["curva_k"].fillna(X["p_D_h"]).fillna(X["p_D_media"]).values
+    if objetivo == "diferencia_mixta":  # respecto a la media de D y la curva
+        d = X["p_D_h"].fillna(X["p_D_media"])
+        return (0.5 * d + 0.5 * X["curva_k"].fillna(d)).values
     return np.zeros(len(X))
 
 

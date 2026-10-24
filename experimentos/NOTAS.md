@@ -113,3 +113,16 @@ Reentrenamiento mensual, media de las 4 variantes:
 P90 25,7/28,2 → 22,6/25,7. Adoptado en producción como v1.3 (juego `esios`, con el v1.2 de respaldo y como
 sombra en registro/sombra.csv). Pendiente: confirmar que REE no revisa estas previsiones a posteriori
 (foto del 22-oct 09:16 UTC en el scratchpad) y comparar v1.3 con la sombra con precios reales.
+
+## Rondas 15-21 (24-oct-2026): futuros de OMIP y curvas de oferta recientes → v1.4
+- r15 (ext9 = ext8 + futuros OMIP de la sesión de D-1 o anterior; la de D es el precio ya casado): 0,461/0,497 → 0,458/0,491.
+- r16 (variantes nuevas en ext8): l1 ayuda algo en la media; lento, hojas127 y ventana de 730 días no.
+- LEAR con exógenas de e·sios: 0,641/0,697 → 0,569/0,666 solo; en la mezcla, +0,003.
+- r17 (ext10 = ext9 + curva de oferta reciente: mediana del precio en las 12 horas de los 14 días previos con
+  residual REE más parecida): 0,439/0,464. La mayor mejora desde e·sios (el sábado 24 fallamos por anclarnos a D).
+- r18 (objetivo = diferencia con la curva / mixta): solos parecidos; combinados con r17 mejoran 2026.
+- r19 (ext11 = + curvas 7d/k6, 28d/k24, 14d/k4): 0,438/0,456. r20 (curvas por tramo del día): no aporta.
+- r21 (ext11, objetivo diferencia con la curva) + r19 + LEAR e·sios 0,1: 0,435/0,455.
+- Corrección de sesgo: K=0,7 y vida media 14 siguen siendo las mejores (rejilla K 0,3-1 × vida 3-28).
+- Sistema completo con sesgo (ene-2025 a oct-2026): v1.3 rMAE 0,465 (MAE 10,27) → v1.4 0,439 (MAE 9,70);
+  15 min 0,477 → 0,452. En producción desde el 24-oct-2026 (envío del 25).

@@ -68,3 +68,30 @@ r13 = {f"e7_{k}": v for k, v in V1.items()}
 
 # Ronda 14 (ext8 = ext5 + previsiones D+1 de Red Eléctrica, e·sios), mensual (comparar con r8: 0,526 / 0,555)
 r14 = {f"e8_{k}": v for k, v in V1.items()}
+
+# Ronda 15 (ext9 = ext8 + futuros de OMIP de la sesión de D-1 o anterior), mensual (comparar con r14: 0,461 / 0,497)
+r15 = {f"e9_{k}": v for k, v in V1.items()}
+
+# Ronda 16 (ext8): variantes nuevas para diversificar la media (comparar cada una y la media de 5-8)
+r16 = {
+    "e8_lento": dict(ponderar="escala", params={"n_estimators": 2000, "learning_rate": 0.015}),
+    "e8_l1": dict(ponderar="escala", params={"objective": "regression_l1"}),
+    "e8_hojas127": dict(ponderar="escala", params={"num_leaves": 127, "min_child_samples": 80, "colsample_bytree": 0.4}),
+    "e8_v730": dict(ponderar="escala", ventana_dias=730),
+}
+
+# Ronda 17 (ext10 = ext9 + curva de oferta reciente: precio en horas con residual REE parecida), mensual
+r17 = {f"e10_{k}": v for k, v in V1.items()}
+
+# Ronda 18 (ext10): objetivo = diferencia con la curva de oferta reciente, o con la media de D y la curva
+r18 = {**{f"e10c_{k}": dict(v, objetivo="diferencia_curva") for k, v in V1.items()},
+       **{f"e10m_{k}": dict(v, objetivo="diferencia_mixta") for k, v in V1.items()}}
+
+# Ronda 19 (ext11 = ext10 + curvas de 7 días/k=6, 28 días/k=24 y 14 días/k=4), mensual
+r19 = {f"e11_{k}": v for k, v in V1.items()}
+
+# Ronda 20 (ext12 = ext11 + curvas por tramo del día, 14 días/k=6 y 28 días/k=10), mensual
+r20 = {f"e12_{k}": v for k, v in V1.items()}
+
+# Ronda 21 (ext11): objetivo = diferencia con la curva, para combinar con r19
+r21 = {f"e11c_{k}": dict(v, objetivo="diferencia_curva") for k, v in V1.items()}

@@ -386,3 +386,87 @@ def anadir_esios(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
         X[f"{col}_E_dia"] = entrega.map(diaria[col]).values
         X[f"{col}_dd"] = X[f"{col}_E_dia"] - (entrega - timedelta(days=1)).map(diaria[col]).values
     return X
+
+
+def _futuro_por_dia(omip: pd.DataFrame, minimo_dias: int = 2) -> pd.DataFrame:
+    """Para cada día de entrega, la referencia de OMIP de la última sesión cerrada al menos `minimo_dias`
+    antes (con 2: la tarde de D-1 para predecir E el día D). Contrato diario; si no hay, el de fin de semana."""
+    t = omip[omip["tipo"].isin(["D", "WE"]) & omip["ref"].notna()].copy()
+    t["sesion"] = pd.to_datetime(t["sesion"])
+    t["inicio"] = pd.to_datetime(t["inicio"])
+    filas = []
+    for tipo, desfase in (("D", [0]), ("WE", [0, 1])):
+        s = t[t["tipo"] == tipo]
+        for d in desfase:  # el de fin de semana vale para el sábado y el domingo
+            filas.append(s.assign(entrega=s["inicio"] + pd.Timedelta(days=d), prioridad=0 if tipo == "D" else 1))
+    t = pd.concat(filas)
+    t = t[(t["entrega"] - t["sesion"]).dt.days >= minimo_dias]
+    t = t.sort_values(["entrega", "sesion", "prioridad"], ascending=[True, False, True])
+    t = t.drop_duplicates("entrega")
+    return pd.DataFrame({"fut": t["ref"].values, "fut_ant": t["ref_anterior"].values,
+                         "fut_edad": (t["entrega"] - t["sesion"]).dt.days.values},
+                        index=t["entrega"].dt.date.values)
+
+
+def anadir_futuros(X: pd.DataFrame, datos: dict) -> pd.DataFrame:
+    """Futuros de OMIP: precio medio que espera el mercado para E (sesión de D-1 o anterior), su cambio
+    respecto a la sesión previa, la diferencia con la media de D y lo que se equivocó el mercado con D."""
+    if "omip" not in datos:
+        return X
+    X = X.copy()
+    f = _futuro_por_dia(datos["omip"])
+    entrega = pd.Series(X["entrega"].values, index=X.index)
+    D = entrega - timedelta(days=1)
+    X["fut_E"] = entrega.map(f["fut"]).values
+    X["fut_edad"] = entrega.map(f["fut_edad"]).values
+    X["fut_cambio"] = X["fut_E"] - entrega.map(f["fut_ant"]).values
+    real = tabla_diaria(datos["precios"]).mean(axis=1)
+    X["fut_menos_D"] = X["fut_E"] - D.map(real).values
+    X["fut_error_D"] = D.map(f["fut"]).values - D.map(real).values
+    if "p_D_h" in X:
+        X["fut_hora"] = X["fut_E"] + (X["p_D_h"] - D.map(real).values)  # forma de D sobre el nivel del futuro
+    return X
+
+
+def anadir_curva(X: pd.DataFrame, datos: dict, dias: int = 14, k: int = 12, sufijo: str = "",
+                 por_tramo: bool = False) -> pd.DataFrame:
+    """Curva de oferta reciente: para cada hora de E, mediana del precio real en las k horas de los
+    `dias` días anteriores (hasta D incluido) cuya demanda residual prevista por REE se parecía más
+    a la prevista para esa hora de E. Capta que el precio no es lineal en la residual (por encima de
+    ~14 GW lo marca el gas) sin anclarse al precio de D."""
+    if "esios" not in datos:
+        return X
+    X = X.copy()
+    e = datos["esios"] / 1000
+    residual = (e["esios_demanda"] - e["esios_eolica"] - e["esios_fv"]).dropna()
+    precio = datos["precios"].reindex(residual.index)
+    pares = pd.DataFrame({"r": residual, "p": precio}).dropna()
+    dia_par = pares.index.tz_convert(MADRID).date
+    tramos = np.array([0] * 7 + [1] * 3 + [2] * 8 + [3] * 6)
+    tramo_par = tramos[pares.index.tz_convert(MADRID).hour]
+    tramo_X = tramos[X.index.tz_convert(MADRID).hour]
+    salida = {f"curva{sufijo}_k": np.full(len(X), np.nan), f"curva{sufijo}_q25": np.full(len(X), np.nan),
+              f"curva{sufijo}_q75": np.full(len(X), np.nan)}
+    filas = pd.Series(np.arange(len(X)), index=X["entrega"].values)
+    r_E = residual.reindex(X.index).values
+    for E, idx in filas.groupby(level=0):
+        sel = (dia_par < E) & (dia_par >= E - timedelta(days=dias))
+        if sel.sum() < 48:
+            continue
+        r_p, p_p, t_p = pares["r"].values[sel], pares["p"].values[sel], tramo_par[sel]
+        for i in idx.values:
+            if np.isnan(r_E[i]):
+                continue
+            if por_tramo:
+                mismo = t_p == tramo_X[i]
+                cerca = np.argsort(np.abs(r_p[mismo] - r_E[i]))[:k]
+                v = p_p[mismo][cerca]
+            else:
+                cerca = np.argsort(np.abs(r_p - r_E[i]))[:k]
+                v = p_p[cerca]
+            salida[f"curva{sufijo}_k"][i] = np.median(v)
+            salida[f"curva{sufijo}_q25"][i], salida[f"curva{sufijo}_q75"][i] = np.percentile(v, [25, 75])
+    for c, v in salida.items():
+        X[c] = v
+    X[f"curva{sufijo}_menos_D"] = X[f"curva{sufijo}_k"] - X["p_D_h"]
+    return X
